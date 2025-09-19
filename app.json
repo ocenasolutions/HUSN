@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "HUSN",
+    "slug": "HUSN",
+    "scheme": "HUSNapp",  
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/HUSN.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/HUSN.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/HUSN.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.ocena.NewProject"
+    },
+    "web": {
+      "favicon": "./assets/HUSN.png"
+    }
+  }
+}
