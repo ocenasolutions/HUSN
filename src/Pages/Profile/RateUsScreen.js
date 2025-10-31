@@ -14,6 +14,7 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../../contexts/AuthContext';
 import { API_URL } from '../../API/config';
+import Header from '../../Components/Header';
 
 const RateUsScreen = ({ navigation }) => {
   const { user } = useAuth();
@@ -196,6 +197,7 @@ const RateUsScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Header/>
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}

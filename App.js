@@ -1,9 +1,10 @@
-// App.js - Updated with order confirmation and tracking screens
+// App.js - Updated with CartProvider
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { StatusBar, View, ActivityIndicator, Text, SafeAreaView, StyleSheet } from 'react-native';
+import { StatusBar, View, ActivityIndicator, Text, StyleSheet } from 'react-native';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { CartProvider } from './src/contexts/CartContext';
 
 // Import Confirmation
 import SignUp from './src/Confirmation/SignUp';
@@ -13,20 +14,16 @@ import ForgetPassword from './src/Confirmation/ForgetPassword';
 // Import Pages
 import LandingPage from './src/LandingPage/LandingPage';
 import Dashboard from './src/Pages/Dashboard/Dashboard';
-import ProductUploadScreen from './src/Pages/Dashboard/ProductUploadScreen';
-import AdminUpload from './src/Pages/Dashboard/AdminUpload';
-import MediaUploadScreen from './src/Pages/Dashboard/MediaUploadScreen';
-import ProfilePage from './src/Pages/Profile/ProfilePage';
 
 // Import Profile Sub-pages
+import ProfilePage from './src/Pages/Profile/ProfilePage';
 import WishlistScreen from './src/Pages/Profile/WishlistScreen';
 import SavedAddressesScreen from './src/Pages/Profile/SavedAddressesScreen';
 import MyOrdersScreen from './src/Pages/Profile/MyOrdersScreen';
 import HelpCenterScreen from './src/Pages/Profile/HelpCenterScreen';
+import ChatScreen from './src/Pages/Profile/ChatScreen.js';
 import AboutUsScreen from './src/Pages/Profile/AboutUsScreen';
-import RateUsScreen from './src/Pages/Profile/RateUsScreen';
-import TermsScreen from './src/Pages/Profile/TermsScreen';
-import PrivacyScreen from './src/Pages/Profile/PrivacyScreen';
+import DeleteAccountScreen from './src/Pages/Profile/DeleteAccountScreen';
 
 // Import Main Pages
 import ServicesPage from './src/Pages/Services/ServicesPage';
@@ -42,13 +39,22 @@ import ProductCartScreen from './src/Pages/Product/ProductCartScreen';
 import ServiceDetails from './src/Pages/Services/ServiceDetails.js';
 import ViewCartScreen from './src/Pages/Cart/ViewCartScreen';
 import CheckoutScreen from './src/Pages/Booking/CheckoutScreen';
-import { MyBookingsScreen, NotificationsScreen } from './src/Pages/Booking/MyBookingsScreen';
-import BookingManagementScreen from './src/Pages/Admin/BookingManagementScreen';
+import MyBookingsScreen from './src/Pages/Booking/MyBookingsScreen';
 import ProductDetails from './src/Pages/Product/ProductDetails.js';
 
 // Import New Order Flow Components
 import OrderConfirmationScreen from './src/Pages/Booking/OrderConfirmationScreen';
 import TrackOrderScreen from './src/Pages/Booking/TrackOrderScreen';
+
+import PaymentGatewayScreen from './src/Pages/Payment/PaymentGatewayScreen';
+
+import ReviewableItemsScreen from './src/Pages/Review/ReviewableItemsScreen';
+import ReviewsScreen from './src/Pages/Review/ReviewsScreen';
+import WriteReviewScreen from './src/Pages/Review/WriteReviewScreen';
+import ProfessionalReviewsScreen from './src/Pages/Review/ProfessionalReviewsScreen';
+
+import ProfessionalTrackingScreen from './src/Pages/Professional/ProfessionalTrackingScreen';
+import UserTrackingScreen from './src/Pages/User/UserTrackingScreen';
 
 import Footer from './src/Components/Footer';
 
@@ -77,7 +83,6 @@ const ScreenWrapper = ({ component: Component, showFooter = false, ...props }) =
   );
 };
 
-// Screen Wrappers with Footer
 const DashboardWithFooter = (props) => (
   <ScreenWrapper component={Dashboard} showFooter={true} {...props} />
 );
@@ -103,14 +108,6 @@ const ProfileWithFooter = (props) => (
 );
 
 // Screen Wrappers without Footer
-const AdminUploadWrapper = (props) => (
-  <ScreenWrapper component={AdminUpload} showFooter={false} {...props} />
-);
-
-const BookingManagementWrapper = (props) => (
-  <ScreenWrapper component={BookingManagementScreen} showFooter={false} {...props} />
-);
-
 const WishlistWrapper = (props) => (
   <ScreenWrapper component={WishlistScreen} showFooter={false} {...props} />
 );
@@ -127,36 +124,20 @@ const MyBookingsWrapper = (props) => (
   <ScreenWrapper component={MyBookingsScreen} showFooter={false} {...props} />
 );
 
-const NotificationsWrapper = (props) => (
-  <ScreenWrapper component={NotificationsScreen} showFooter={false} {...props} />
-);
-
 const HelpCenterWrapper = (props) => (
   <ScreenWrapper component={HelpCenterScreen} showFooter={false} {...props} />
+);
+
+const ChatWrapper = (props) => (
+  <ScreenWrapper component={ChatScreen} showFooter={false} {...props} />
 );
 
 const AboutUsWrapper = (props) => (
   <ScreenWrapper component={AboutUsScreen} showFooter={false} {...props} />
 );
 
-const RateUsWrapper = (props) => (
-  <ScreenWrapper component={RateUsScreen} showFooter={false} {...props} />
-);
-
-const TermsWrapper = (props) => (
-  <ScreenWrapper component={TermsScreen} showFooter={false} {...props} />
-);
-
-const PrivacyWrapper = (props) => (
-  <ScreenWrapper component={PrivacyScreen} showFooter={false} {...props} />
-);
-
-const MediaUploadWrapper = (props) => (
-  <ScreenWrapper component={MediaUploadScreen} showFooter={false} {...props} />
-);
-
-const ProductUploadWrapper = (props) => (
-  <ScreenWrapper component={ProductUploadScreen} showFooter={false} {...props} />
+const DeleteAccountWrapper = (props) => (
+  <ScreenWrapper component={DeleteAccountScreen} showFooter={false} {...props} />
 );
 
 const ServiceDetailsWrapper = (props) => (
@@ -175,7 +156,6 @@ const CheckoutWrapper = (props) => (
   <ScreenWrapper component={CheckoutScreen} showFooter={false} {...props} />
 );
 
-// New Product-related Screen Wrappers
 const ProductCartWrapper = (props) => (
   <ScreenWrapper component={ProductCartScreen} showFooter={false} {...props} />
 );
@@ -184,13 +164,40 @@ const ProductDetailsWrapper = (props) => (
   <ScreenWrapper component={ProductDetails} showFooter={false} {...props} />
 );
 
-// New Order Flow Screen Wrappers
+const PaymentGatewayWrapper = (props) => (
+  <ScreenWrapper component={PaymentGatewayScreen} showFooter={false} {...props} />
+);
+
 const OrderConfirmationWrapper = (props) => (
   <ScreenWrapper component={OrderConfirmationScreen} showFooter={true} {...props} />
 );
 
 const TrackOrderWrapper = (props) => (
   <ScreenWrapper component={TrackOrderScreen} showFooter={true} {...props} />
+);
+
+const ReviewableItemsScreenWrapper = (props) => (
+  <ScreenWrapper component={ReviewableItemsScreen} showFooter={true} {...props} />
+);
+
+const WriteReviewScreenWrapper = (props) => (
+  <ScreenWrapper component={WriteReviewScreen} showFooter={true} {...props} />
+);
+
+const ReviewsScreenWrapper = (props) => (
+  <ScreenWrapper component={ReviewsScreen} showFooter={true} {...props} />
+);
+
+const ProfessionalReviewsScreenWrapper = (props) => (
+  <ScreenWrapper component={ProfessionalReviewsScreen} showFooter={true} {...props} />
+);
+
+const ProfessionalTrackingWrapper = (props) => (
+  <ScreenWrapper component={ProfessionalTrackingScreen} showFooter={false} {...props} />
+);
+
+const UserTrackingWrapper = (props) => (
+  <ScreenWrapper component={UserTrackingScreen} showFooter={false} {...props} />
 );
 
 const AuthStack = () => (
@@ -222,26 +229,7 @@ const AppStack = () => (
     <Stack.Screen name="Offers" component={OffersWithFooter} />
     <Stack.Screen name="Product" component={ProductWithFooter} />
     <Stack.Screen name="Profile" component={ProfileWithFooter} />
-
-    {/* Admin screens */}
-    <Stack.Screen 
-      name="AdminUpload" 
-      component={AdminUploadWrapper}
-      options={{
-        headerShown: false,
-        presentation: 'card',
-      }}
-    />
     
-    <Stack.Screen 
-      name="BookingManagement" 
-      component={BookingManagementWrapper}
-      options={{
-        headerShown: false,
-        presentation: 'card',
-      }}
-    />
-
     {/* Profile sub-screens */}
     <Stack.Screen 
       name="Wishlist" 
@@ -251,7 +239,6 @@ const AppStack = () => (
         presentation: 'card',
       }}
     />
-    
     <Stack.Screen 
       name="SavedAddresses" 
       component={SavedAddressesWrapper}
@@ -260,7 +247,6 @@ const AppStack = () => (
         presentation: 'card',
       }}
     />
-    
     <Stack.Screen 
       name="MyOrders" 
       component={MyOrdersWrapper}
@@ -269,19 +255,9 @@ const AppStack = () => (
         presentation: 'card',
       }}
     />
-
     <Stack.Screen 
       name="MyBookings" 
       component={MyBookingsWrapper}
-      options={{
-        headerShown: false,
-        presentation: 'card',
-      }}
-    />
-
-    <Stack.Screen 
-      name="Notifications" 
-      component={NotificationsWrapper}
       options={{
         headerShown: false,
         presentation: 'card',
@@ -296,6 +272,15 @@ const AppStack = () => (
         presentation: 'card',
       }}
     />
+
+    <Stack.Screen 
+      name="ChatScreen" 
+      component={ChatWrapper}
+      options={{
+        headerShown: false,
+        presentation: 'card',
+      }}
+    />
     
     <Stack.Screen 
       name="AboutUs" 
@@ -305,50 +290,14 @@ const AppStack = () => (
         presentation: 'card',
       }}
     />
-    
-    <Stack.Screen 
-      name="RateUs" 
-      component={RateUsWrapper}
-      options={{
-        headerShown: false,
-        presentation: 'card',
-      }}
-    />
-    
-    <Stack.Screen 
-      name="Terms" 
-      component={TermsWrapper}
-      options={{
-        headerShown: false,
-        presentation: 'card',
-      }}
-    />
-    
-    <Stack.Screen 
-      name="Privacy" 
-      component={PrivacyWrapper}
-      options={{
-        headerShown: false,
-        presentation: 'card',
-      }}
-    />
 
-    {/* Upload screens */}
-    <Stack.Screen
-      name="MediaUploadScreen"
-      component={MediaUploadWrapper}
+    <Stack.Screen 
+      name="DeleteAccount" 
+      component={DeleteAccountWrapper}
       options={{
         headerShown: false,
         presentation: 'card',
-      }}
-    />
-    
-    <Stack.Screen
-      name="ProductUploadScreen"
-      component={ProductUploadWrapper}
-      options={{
-        headerShown: false,
-        presentation: 'card',
+        gestureEnabled: true,
       }}
     />
 
@@ -405,7 +354,7 @@ const AppStack = () => (
         presentation: 'card',
       }}
     />
-
+    
     {/* New Order Flow screens */}
     <Stack.Screen
       name="OrderConfirmation"
@@ -413,7 +362,7 @@ const AppStack = () => (
       options={{
         headerShown: false,
         presentation: 'card',
-        gestureEnabled: false, // Prevent swipe back
+        gestureEnabled: false,
       }}
     />
 
@@ -425,10 +374,73 @@ const AppStack = () => (
         presentation: 'card',
       }}
     />
+
+    <Stack.Screen
+      name="ReviewableItemsScreen"
+      component={ReviewableItemsScreenWrapper}
+      options={{
+        headerShown: false,
+        presentation: 'card',
+      }}
+    />
+    <Stack.Screen
+      name="ReviewsScreen"
+      component={ReviewsScreenWrapper}
+      options={{
+        headerShown: false,
+        presentation: 'card',
+      }}
+    />
+    <Stack.Screen
+      name="WriteReviewScreen"
+      component={WriteReviewScreenWrapper}
+      options={{
+        headerShown: false,
+        presentation: 'card',
+      }}
+    />
+    <Stack.Screen
+      name="PaymentGateway"
+      component={PaymentGatewayWrapper}
+      options={{
+        headerShown: false,
+        presentation: 'card',
+        gestureEnabled: false, 
+      }}
+    />
+
+    <Stack.Screen
+      name="ProfessionalReviewsScreen"
+      component={ProfessionalReviewsScreenWrapper}
+      options={{
+        headerShown: false,
+        presentation: 'card',
+      }}
+    />
+
+    <Stack.Screen
+      name="ProfessionalTracking"
+      component={ProfessionalTrackingWrapper}
+      options={{
+        headerShown: false,
+        presentation: 'card',
+      }}
+    />
+
+    <Stack.Screen
+      name="UserTracking"
+      component={UserTrackingWrapper}
+      options={{
+        headerShown: false,
+        presentation: 'card',
+      }}
+    />
+
+
   </Stack.Navigator>
 );
 
-// Main Navigation Component
+// Main Navigation Component - Now wrapped with CartProvider
 const AppNavigation = () => {
   const { user, loading } = useAuth();
 
@@ -437,10 +449,12 @@ const AppNavigation = () => {
   }
 
   return (
-    <NavigationContainer>
-      <StatusBar barStyle="light-content" backgroundColor="#FF6B9D" />
-      {user ? <AppStack /> : <AuthStack />}
-    </NavigationContainer>
+    <CartProvider>
+      <NavigationContainer>
+        <StatusBar barStyle="light-content" backgroundColor="#FF6B9D" />
+        {user ? <AppStack /> : <AuthStack />}
+      </NavigationContainer>
+    </CartProvider>
   );
 };
 

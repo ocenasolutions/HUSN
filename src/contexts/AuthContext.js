@@ -49,6 +49,54 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // NEW: OTP-based signup - Step 1: Send OTP
+  const signupSendOTP = async (userData) => {
+    try {
+      const response = await fetch(`${API_URL}/auth/signup/send-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userData),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        return data;
+      } else {
+        throw new Error(data.message);
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // NEW: OTP-based signup - Step 2: Verify OTP and create account
+  const signupVerifyOTP = async (email, otp) => {
+    try {
+      const response = await fetch(`${API_URL}/auth/signup/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, otp }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await saveAuthData(data.user, data.tokens);
+        return data;
+      } else {
+        throw new Error(data.message);
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // Legacy signup method (kept for backward compatibility)
   const signup = async (userData) => {
     try {
       const response = await fetch(`${API_URL}/auth/signup`, {
@@ -95,6 +143,31 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Updated Google authentication method
+  const googleLogin = async (googleData) => {
+    try {
+      const response = await fetch(`${API_URL}/auth/google`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(googleData),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await saveAuthData(data.user, data.tokens);
+        return data;
+      } else {
+        throw new Error(data.message);
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // Legacy Google auth method (kept for backward compatibility)
   const googleAuth = async (accessToken) => {
     try {
       const response = await fetch(`${API_URL}/auth/google`, {
@@ -118,6 +191,53 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // NEW: Forgot Password - Step 1: Send OTP
+  const forgotPasswordSendOTP = async (email) => {
+    try {
+      const response = await fetch(`${API_URL}/auth/forgot-password/send-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.message);
+      }
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // NEW: Forgot Password - Step 2: Verify OTP and login
+  const forgotPasswordVerifyOTP = async (email, otp) => {
+    try {
+      const response = await fetch(`${API_URL}/auth/forgot-password/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, otp }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await saveAuthData(data.user, data.tokens);
+        return data;
+      } else {
+        throw new Error(data.message);
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // Legacy OTP methods (kept for backward compatibility)
   const sendOTP = async (email) => {
     try {
       const response = await fetch(`${API_URL}/auth/send-otp`, {
@@ -162,7 +282,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // New method to set guest user
+  // Set guest user method
   const setGuestUser = () => {
     const guestUser = {
       id: 'guest',
@@ -173,6 +293,61 @@ export const AuthProvider = ({ children }) => {
     };
     setUser(guestUser);
     // Don't save guest user to AsyncStorage so they'll need to authenticate on app restart
+  };
+
+  // Update user method
+  const updateUser = async (updatedData) => {
+    try {
+      const response = await fetch(`${API_URL}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${tokens.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedData),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        const updatedUser = { ...user, ...updatedData };
+        await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+        setUser(updatedUser);
+        return data;
+      } else {
+        throw new Error(data.message);
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // Delete account method
+  const deleteAccount = async (password = '') => {
+    try {
+      const response = await fetch(`${API_URL}/auth/delete-account`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${tokens?.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ password }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Clear all local data
+        await AsyncStorage.multiRemove(['user', 'tokens']);
+        setUser(null);
+        setTokens(null);
+        return data;
+      } else {
+        throw new Error(data.message);
+      }
+    } catch (error) {
+      throw error;
+    }
   };
 
   const logout = async () => {
@@ -199,12 +374,27 @@ export const AuthProvider = ({ children }) => {
     user,
     tokens,
     loading,
+    
+    // New OTP-based methods
+    signupSendOTP,
+    signupVerifyOTP,
+    forgotPasswordSendOTP,
+    forgotPasswordVerifyOTP,
+    
+    // Legacy methods (for backward compatibility)
     signup,
     login,
     googleAuth,
     sendOTP,
     verifyOTP,
-    setGuestUser, // Add this new method
+    
+    // Updated methods
+    googleLogin,
+    
+    // Other methods
+    setGuestUser,
+    updateUser,
+    deleteAccount,
     logout,
   };
 

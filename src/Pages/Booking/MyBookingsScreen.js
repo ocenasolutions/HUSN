@@ -10,12 +10,12 @@ import {
   ActivityIndicator,
   SafeAreaView,
   RefreshControl,
+  Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { API_URL } from '../../API/config';
 import Header from '../../Components/Header';
 import { useAuth } from '../../contexts/AuthContext'; 
-
 
 const MyBookingsScreen = ({ navigation }) => {
   const [bookings, setBookings] = useState([]);
@@ -35,33 +35,53 @@ const MyBookingsScreen = ({ navigation }) => {
     fetchBookings();
   }, [selectedStatus]);
 
-  const fetchBookings = async () => {
-    try {
-      setLoading(true);
-      
-      const statusParam = selectedStatus === 'all' ? '' : `?status=${selectedStatus}`;
-      const response = await fetch(`${API_URL}/bookings/my-bookings${statusParam}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tokens.accessToken}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setBookings(data.data);
-      } else {
-        Alert.alert('Error', data.message || 'Failed to fetch bookings');
-      }
-    } catch (error) {
-      console.error('Fetch bookings error:', error);
-      Alert.alert('Error', 'Something went wrong while fetching bookings');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+const fetchBookings = async () => {
+  try {
+    setLoading(true);
+    console.log('📱 Fetching bookings...');
+    console.log('🔑 Token exists:', !!tokens.accessToken);
+    console.log('📍 API URL:', API_URL);
+    let url = `${API_URL}/bookings/my-bookings`;
+    if (selectedStatus && selectedStatus !== 'all') {
+      url += `?status=${selectedStatus}`;
     }
-  };
+    
+    console.log('🌐 Request URL:', url);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${tokens.accessToken}`,
+      },
+    });
+
+    console.log('📡 Response status:', response.status);
+    
+    const data = await response.json();
+    console.log('📦 Response data:', JSON.stringify(data, null, 2));
+    if (data.success) {
+      const allBookings = data.data || [];
+      console.log('✅ Total bookings received:', allBookings.length);      
+      const serviceBookings = allBookings.filter(booking => 
+        booking.services && booking.services.length > 0
+      );
+      
+      console.log('✂️ Service bookings:', serviceBookings.length);
+      setBookings(serviceBookings);
+    } else {
+      console.error('❌ API returned error:', data.message);
+      Alert.alert('Error', data.message || 'Failed to fetch bookings');
+    }
+  } catch (error) {
+    console.error('❌ Fetch bookings error:', error);
+    console.error('Error details:', error.message);
+    Alert.alert('Error', 'Something went wrong while fetching bookings. Please check your connection.');
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -81,14 +101,12 @@ const MyBookingsScreen = ({ navigation }) => {
             try {
               const response = await fetch(`${API_URL}/bookings/${bookingId}/cancel`, {
                 method: 'PATCH',
-              headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tokens.accessToken}`,
-        },
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${tokens.accessToken}`,
+                },
               });
-
               const data = await response.json();
-
               if (data.success) {
                 Alert.alert('Success', 'Booking cancelled successfully');
                 fetchBookings();
@@ -137,6 +155,10 @@ const MyBookingsScreen = ({ navigation }) => {
     });
   };
 
+  const formatTime = (timeString) => {
+    return timeString || 'Not specified';
+  };
+
   const renderBookingCard = (booking) => (
     <View key={booking._id} style={styles.bookingCard}>
       <View style={styles.bookingHeader}>
@@ -146,22 +168,51 @@ const MyBookingsScreen = ({ navigation }) => {
           <Text style={styles.statusText}>{booking.status.toUpperCase()}</Text>
         </View>
       </View>
-
+      {/* Services Info */}
       <View style={styles.servicesInfo}>
+        <Text style={styles.servicesTitle}>Services Booked:</Text>
         {booking.services.map((serviceItem, index) => (
           <View key={index} style={styles.serviceItem}>
-            <Text style={styles.serviceName}>{serviceItem.service.name}</Text>
+            <Image
+              source={{ 
+                uri: serviceItem.service?.image_url || 'https://via.placeholder.com/50x50'
+              }}
+              style={styles.serviceImage}
+            />
             <View style={styles.serviceDetails}>
-              <Text style={styles.serviceDate}>
+              <Text style={styles.serviceName}>{serviceItem.service?.name || 'Service'}</Text>
+              <View style={styles.serviceSchedule}>
                 <Icon name="calendar-outline" size={14} color="#7F8C8D" />
-                {' '}{formatDate(serviceItem.selectedDate)} at {serviceItem.selectedTime}
-              </Text>
-              <Text style={styles.servicePrice}>₹{serviceItem.price} × {serviceItem.quantity}</Text>
+                <Text style={styles.serviceDate}>
+                  {formatDate(serviceItem.selectedDate)} at {formatTime(serviceItem.selectedTime)}
+                </Text>
+              </View>
+              <Text style={styles.serviceQuantity}>Quantity: {serviceItem.quantity}</Text>
+              {serviceItem.notes && (
+                <Text style={styles.serviceNotes}>Note: {serviceItem.notes}</Text>
+              )}
             </View>
+            <Text style={styles.servicePrice}>₹{serviceItem.price}</Text>
           </View>
         ))}
       </View>
-
+      {/* Customer Info */}
+      {booking.customerInfo && (
+        <View style={styles.customerInfo}>
+          <Text style={styles.customerInfoTitle}>Contact Details:</Text>
+          <Text style={styles.customerDetail}>
+            <Icon name="person-outline" size={14} color="#7F8C8D" /> {booking.customerInfo.name}
+          </Text>
+          <Text style={styles.customerDetail}>
+            <Icon name="call-outline" size={14} color="#7F8C8D" /> {booking.customerInfo.phone}
+          </Text>
+          {booking.customerInfo.address && (
+            <Text style={styles.customerDetail}>
+              <Icon name="location-outline" size={14} color="#7F8C8D" /> {booking.customerInfo.address}
+            </Text>
+          )}
+        </View>
+      )}
       <View style={styles.bookingFooter}>
         <View style={styles.totalContainer}>
           <Text style={styles.totalLabel}>Total Amount</Text>
@@ -172,30 +223,94 @@ const MyBookingsScreen = ({ navigation }) => {
         </Text>
       </View>
 
-      {booking.rejectionReason && (
+      {/* Rejection Reason */}
+      {booking.status === 'rejected' && booking.rejectionReason && (
         <View style={styles.rejectionContainer}>
           <Icon name="information-circle" size={16} color="#E74C3C" />
           <Text style={styles.rejectionReason}>{booking.rejectionReason}</Text>
         </View>
       )}
 
-      <View style={styles.actionButtons}>
-        <TouchableOpacity
-          style={styles.detailsButton}
-          onPress={() => navigation.navigate('BookingDetails', { bookingId: booking._id })}
-        >
-          <Text style={styles.detailsButtonText}>View Details</Text>
-        </TouchableOpacity>
+      {/* Admin Notes */}
+      {booking.adminNotes && (
+        <View style={styles.adminNotesContainer}>
+          <Icon name="document-text-outline" size={16} color="#54A0FF" />
+          <Text style={styles.adminNotes}>{booking.adminNotes}</Text>
+        </View>
+      )}
 
-        {(booking.status === 'pending' || booking.status === 'confirmed') && (
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={() => handleCancelBooking(booking._id)}
-          >
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      {/* Action Buttons */}
+{/* Action Buttons */}
+<View style={styles.actionButtons}>
+  <TouchableOpacity
+    style={styles.detailsButton}
+    onPress={() => navigation.navigate('BookingDetails', { bookingId: booking._id })}
+  >
+    <Text style={styles.detailsButtonText}>View Details</Text>
+  </TouchableOpacity>
+
+  {(booking.status === 'pending' || booking.status === 'confirmed') && (
+    <TouchableOpacity
+      style={styles.cancelButton}
+      onPress={() => handleCancelBooking(booking._id)}
+    >
+      <Text style={styles.cancelButtonText}>Cancel</Text>
+    </TouchableOpacity>
+  )}
+
+  {booking.status === 'completed' && (
+    <>
+      <TouchableOpacity
+        style={styles.rateButton}
+        onPress={() => {
+          // Navigate to review screen for this booking
+          // Convert booking to order format for ReviewableItems screen
+          const orderData = {
+            _id: booking._id,
+            serviceItems: booking.services.map(s => ({
+              serviceId: s.service._id,
+              quantity: s.quantity,
+              price: s.price
+            }))
+          };
+          navigation.navigate('ReviewableItems', { 
+            orderId: booking._id,
+            isBooking: true // flag to indicate this is from booking
+          });
+        }}
+      >
+        <Icon name="star-outline" size={16} color="#FFD700" />
+        <Text style={styles.rateButtonText}>Rate Services</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity
+        style={styles.rebookButton}
+        onPress={() => navigation.navigate('Services', { 
+          serviceId: booking.services[0]?.service?._id 
+        })}
+      >
+        <Icon name="repeat-outline" size={16} color="#FF6B9D" />
+        <Text style={styles.rebookButtonText}>Book Again</Text>
+      </TouchableOpacity>
+    </>
+  )}
+</View>
+    </View>
+  );
+
+  const renderEmptyBookings = () => (
+    <View style={styles.emptyContainer}>
+      <Icon name="calendar-outline" size={80} color="#FF6B9D" />
+      <Text style={styles.emptyTitle}>No Service Bookings Yet</Text>
+      <Text style={styles.emptySubtitle}>
+        You haven't booked any services yet. Explore our amazing services!
+      </Text>
+      <TouchableOpacity
+        style={styles.browseButton}
+        onPress={() => navigation.navigate('MainTabs', { screen: 'Services' })}
+      >
+        <Text style={styles.browseButtonText}>Browse Services</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -204,6 +319,12 @@ const MyBookingsScreen = ({ navigation }) => {
       <Header />
       
       <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Icon name="arrow-back" size={24} color="#2C3E50" />
+        </TouchableOpacity>
         <Text style={styles.title}>My Bookings</Text>
         <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
           <Icon name="notifications-outline" size={24} color="#FF6B9D" />
@@ -237,22 +358,7 @@ const MyBookingsScreen = ({ navigation }) => {
           <Text style={styles.loadingText}>Loading your bookings...</Text>
         </View>
       ) : bookings.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Icon name="calendar-outline" size={64} color="#BDC3C7" />
-          <Text style={styles.emptyTitle}>No bookings found</Text>
-          <Text style={styles.emptySubtitle}>
-            {selectedStatus === 'all' 
-              ? 'You haven\'t made any bookings yet'
-              : `No ${selectedStatus} bookings found`
-            }
-          </Text>
-          <TouchableOpacity
-            style={styles.browseButton}
-            onPress={() => navigation.navigate('Services')}
-          >
-            <Text style={styles.browseButtonText}>Browse Services</Text>
-          </TouchableOpacity>
-        </View>
+        renderEmptyBookings()
       ) : (
         <ScrollView
           style={styles.content}
@@ -267,202 +373,6 @@ const MyBookingsScreen = ({ navigation }) => {
     </SafeAreaView>
   );
 };
-
-// src/Pages/Notifications/NotificationsScreen.js
-const NotificationsScreen = ({ navigation }) => {
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const { tokens } = useAuth(); 
-
-  useEffect(() => {
-    fetchNotifications();
-  }, []);
-
-  const fetchNotifications = async () => {
-    try {
-      setLoading(true);
-      
-      const response = await fetch(`${API_URL}/notifications`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tokens.accessToken}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setNotifications(data.data);
-      } else {
-        Alert.alert('Error', data.message || 'Failed to fetch notifications');
-      }
-    } catch (error) {
-      console.error('Fetch notifications error:', error);
-      Alert.alert('Error', 'Something went wrong while fetching notifications');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchNotifications();
-  };
-
-  const markAsRead = async (notificationId) => {
-    try {
-      await fetch(`${API_URL}/notifications/${notificationId}/read`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tokens.accessToken}`,
-        },
-      });
-
-      setNotifications(prevNotifications =>
-        prevNotifications.map(notification =>
-          notification._id === notificationId
-            ? { ...notification, isRead: true, readAt: new Date() }
-            : notification
-        )
-      );
-    } catch (error) {
-      console.error('Mark as read error:', error);
-    }
-  };
-
-  const markAllAsRead = async () => {
-    try {
-      await fetch(`${API_URL}/notifications/mark-all-read`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tokens.accessToken}`,
-        },
-      });
-
-      setNotifications(prevNotifications =>
-        prevNotifications.map(notification => ({
-          ...notification,
-          isRead: true,
-          readAt: new Date()
-        }))
-      );
-    } catch (error) {
-      console.error('Mark all as read error:', error);
-    }
-  };
-
-  const getNotificationIcon = (type) => {
-    const icons = {
-      booking_confirmed: 'checkmark-circle',
-      booking_rejected: 'close-circle',
-      booking_completed: 'checkmark-done-circle',
-      general: 'information-circle',
-    };
-    return icons[type] || 'notifications';
-  };
-
-  const getNotificationColor = (type) => {
-    const colors = {
-      booking_confirmed: '#27AE60',
-      booking_rejected: '#E74C3C',
-      booking_completed: '#8E44AD',
-      general: '#FF6B9D',
-    };
-    return colors[type] || '#7F8C8D';
-  };
-
-  const formatTimeAgo = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = Math.floor((now - date) / (1000 * 60 * 60));
-
-    if (diffInHours < 1) return 'Just now';
-    if (diffInHours < 24) return `${diffInHours}h ago`;
-    
-    const diffInDays = Math.floor(diffInHours / 24);
-    if (diffInDays < 7) return `${diffInDays}d ago`;
-    
-    return date.toLocaleDateString();
-  };
-
-  const renderNotification = (notification) => (
-    <TouchableOpacity
-      key={notification._id}
-      style={[styles.notificationCard, !notification.isRead && styles.unreadNotification]}
-      onPress={() => {
-        if (!notification.isRead) {
-          markAsRead(notification._id);
-        }
-        if (notification.relatedBooking) {
-          navigation.navigate('BookingDetails', { 
-            bookingId: notification.relatedBooking._id || notification.relatedBooking 
-          });
-        }
-      }}
-    >
-      <View style={styles.notificationHeader}>
-        <Icon
-          name={getNotificationIcon(notification.type)}
-          size={24}
-          color={getNotificationColor(notification.type)}
-        />
-        <View style={styles.notificationInfo}>
-          <Text style={styles.notificationTitle}>{notification.title}</Text>
-          <Text style={styles.notificationTime}>{formatTimeAgo(notification.createdAt)}</Text>
-        </View>
-        {!notification.isRead && <View style={styles.unreadDot} />}
-      </View>
-      <Text style={styles.notificationMessage}>{notification.message}</Text>
-    </TouchableOpacity>
-  );
-
-  const unreadCount = notifications.filter(n => !n.isRead).length;
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <Header />
-      
-      <View style={styles.header}>
-        <Text style={styles.title}>Notifications</Text>
-        {unreadCount > 0 && (
-          <TouchableOpacity onPress={markAllAsRead}>
-            <Text style={styles.markAllText}>Mark all as read</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF6B9D" />
-          <Text style={styles.loadingText}>Loading notifications...</Text>
-        </View>
-      ) : notifications.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Icon name="notifications-outline" size={64} color="#BDC3C7" />
-          <Text style={styles.emptyTitle}>No notifications</Text>
-          <Text style={styles.emptySubtitle}>
-            We'll notify you about your booking updates here
-          </Text>
-        </View>
-      ) : (
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-          }
-        >
-          {notifications.map(renderNotification)}
-        </ScrollView>
-      )}
-    </SafeAreaView>
-  );
-};
-
 
 const styles = StyleSheet.create({
   container: {
@@ -479,15 +389,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5E5',
   },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F8F8F8',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#2C3E50',
-  },
-  markAllText: {
-    fontSize: 14,
-    color: '#FF6B9D',
-    fontWeight: '600',
   },
   tabsContainer: {
     backgroundColor: '#fff',
@@ -593,11 +506,29 @@ const styles = StyleSheet.create({
   servicesInfo: {
     marginBottom: 15,
   },
+  servicesTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2C3E50',
+    marginBottom: 10,
+  },
   serviceItem: {
     backgroundColor: '#FFF5F8',
     padding: 12,
     borderRadius: 8,
     marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  serviceImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: '#F8F8F8',
+    marginRight: 12,
+  },
+  serviceDetails: {
+    flex: 1,
   },
   serviceName: {
     fontSize: 16,
@@ -605,20 +536,50 @@ const styles = StyleSheet.create({
     color: '#2C3E50',
     marginBottom: 6,
   },
-  serviceDetails: {
+  serviceSchedule: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 4,
   },
   serviceDate: {
     fontSize: 12,
     color: '#7F8C8D',
-    flex: 1,
+    marginLeft: 4,
+  },
+  serviceQuantity: {
+    fontSize: 12,
+    color: '#7F8C8D',
+    marginBottom: 4,
+  },
+  serviceNotes: {
+    fontSize: 12,
+    color: '#54A0FF',
+    fontStyle: 'italic',
   },
   servicePrice: {
     fontSize: 14,
     fontWeight: '600',
     color: '#FF6B9D',
+    alignSelf: 'flex-start',
+  },
+  customerInfo: {
+    backgroundColor: '#F8F9FA',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  customerInfoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2C3E50',
+    marginBottom: 8,
+  },
+  customerDetail: {
+    fontSize: 12,
+    color: '#7F8C8D',
+    marginBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   bookingFooter: {
     marginBottom: 15,
@@ -661,6 +622,21 @@ const styles = StyleSheet.create({
     color: '#E74C3C',
     lineHeight: 18,
   },
+  adminNotesContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#E3F2FD',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 15,
+    gap: 8,
+  },
+  adminNotes: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1976D2',
+    lineHeight: 18,
+  },
   actionButtons: {
     flexDirection: 'row',
     gap: 10,
@@ -691,51 +667,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  notificationCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  unreadNotification: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF6B9D',
-  },
-  notificationHeader: {
+  rebookButton: {
+    backgroundColor: '#FF6B9D15',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FF6B9D',
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    gap: 6,
   },
-  notificationInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  notificationTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2C3E50',
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: '#7F8C8D',
-    marginTop: 2,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FF6B9D',
-  },
-  notificationMessage: {
+  rebookButtonText: {
+    color: '#FF6B9D',
     fontSize: 14,
-    color: '#7F8C8D',
-    lineHeight: 20,
+    fontWeight: '600',
   },
+  rateButton: {
+  backgroundColor: '#FFD70015',
+  paddingHorizontal: 15,
+  paddingVertical: 12,
+  borderRadius: 8,
+  borderWidth: 1,
+  borderColor: '#FFD700',
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 6,
+  flex: 1,
+},
+rateButtonText: {
+  color: '#FFD700',
+  fontSize: 14,
+  fontWeight: '600',
+},
 });
 
-export { MyBookingsScreen, NotificationsScreen };
+export default MyBookingsScreen;

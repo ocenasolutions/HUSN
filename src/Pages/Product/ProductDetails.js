@@ -16,7 +16,6 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { API_URL } from '../../API/config';
 import { useAuth } from '../../contexts/AuthContext';
 import Header from '../../Components/Header';
-import mockProductData from './mockData.js';
 
 const { width, height } = Dimensions.get('window');
 
@@ -29,6 +28,11 @@ const ProductDetails = ({ route, navigation }) => {
   const [isInWishlist, setIsInWishlist] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewSummary, setReviewSummary] = useState(null);
+  
   const [expandedSections, setExpandedSections] = useState({
     description: false,
     ingredients: false,
@@ -46,6 +50,7 @@ const ProductDetails = ({ route, navigation }) => {
 
   useEffect(() => {
     fetchProductDetails();
+     fetchReviews();
     if (user) {
       checkWishlistStatus();
     }
@@ -68,6 +73,46 @@ const ProductDetails = ({ route, navigation }) => {
       setLoading(false);
     }
   };
+
+  const fetchReviews = async () => {
+  try {
+    setReviewsLoading(true);
+    const response = await fetch(`${API_URL}/reviews/product/${product._id || product.id}`);
+    const data = await response.json();
+    
+    if (data.success) {
+      setReviews(data.data?.reviews || []);
+      setReviewSummary(data.data?.summary || null);
+    } else {
+      setReviews([]);
+      setReviewSummary(null);
+    }
+  } catch (error) {
+    console.error('Error fetching reviews:', error);
+    setReviews([]);
+    setReviewSummary(null);
+  } finally {
+    setReviewsLoading(false);
+  }
+};
+
+const formatDate = (dateString) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffTime = Math.abs(now - date);
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
+};
 
   const checkWishlistStatus = async () => {
     try {
@@ -182,21 +227,46 @@ const ProductDetails = ({ route, navigation }) => {
     }));
   };
 
-  const renderStarRating = (rating, size = 14) => {
-    const stars = [];
-    for (let i = 1; i <= 5; i++) {
+const renderStarRating = (rating, size = 14) => {
+  const stars = [];
+  const fullStars = Math.floor(rating);
+  const hasHalfStar = rating % 1 >= 0.5;
+  
+  for (let i = 1; i <= 5; i++) {
+    if (i <= fullStars) {
       stars.push(
         <Icon
           key={i}
-          name={i <= rating ? "star" : i - rating < 1 ? "star-half" : "star-outline"}
+          name="star"
+          size={size}
+          color="#FFD700"
+          style={{ marginRight: 1 }}
+        />
+      );
+    } else if (i === fullStars + 1 && hasHalfStar) {
+      stars.push(
+        <Icon
+          key={i}
+          name="star-half"
+          size={size}
+          color="#FFD700"
+          style={{ marginRight: 1 }}
+        />
+      );
+    } else {
+      stars.push(
+        <Icon
+          key={i}
+          name="star-outline"
           size={size}
           color="#FFD700"
           style={{ marginRight: 1 }}
         />
       );
     }
-    return <View style={styles.starContainer}>{stars}</View>;
-  };
+  }
+  return <View style={styles.starContainer}>{stars}</View>;
+};
 
   if (loading) {
     return (
@@ -275,7 +345,6 @@ const ProductDetails = ({ route, navigation }) => {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Product Image with Error Handling */}
         <View style={styles.imageContainer}>
           <Image
             source={{ uri: images[selectedImageIndex]?.url }}
@@ -288,7 +357,6 @@ const ProductDetails = ({ route, navigation }) => {
               console.log('Image loaded successfully:', images[selectedImageIndex]?.url);
             }}
           />
-          {/* Image indicator dots if multiple images */}
           {images.length > 1 && (
             <View style={styles.imageIndicators}>
               {images.map((_, index) => (
@@ -309,16 +377,33 @@ const ProductDetails = ({ route, navigation }) => {
         <View style={styles.productInfo}>
           <Text style={styles.productName}>{product.name || 'Radiant Glow Serum'}</Text>
           
-          <View style={styles.ratingPriceRow}>
-            <View style={styles.ratingContainer}>
-              {renderStarRating(mockProductData.ratings.average, 16)}
-              <Text style={styles.ratingText}>
-                {mockProductData.ratings.average} ({mockProductData.ratings.total})
-              </Text>
-            </View>
-            <Text style={styles.price}>Rs.{product.price || '299'}</Text>
-          </View>
-
+         <View style={styles.ratingPriceRow}>
+  <View style={styles.ratingContainer}>
+    {reviewSummary && reviewSummary.total > 0 ? (
+      <>
+        {renderStarRating(
+          Object.entries(reviewSummary.breakdown).reduce(
+            (acc, [rating, count]) => acc + (parseInt(rating) * count),
+            0
+          ) / reviewSummary.total,
+          16
+        )}
+        <Text style={styles.ratingText}>
+          {(Object.entries(reviewSummary.breakdown).reduce(
+            (acc, [rating, count]) => acc + (parseInt(rating) * count),
+            0
+          ) / reviewSummary.total).toFixed(1)} ({reviewSummary.total})
+        </Text>
+      </>
+    ) : (
+      <>
+        {renderStarRating(0, 16)}
+        <Text style={styles.ratingText}>No reviews yet</Text>
+      </>
+    )}
+  </View>
+  <Text style={styles.price}>₹{product.price}</Text>
+</View>
           {/* Quantity Selector */}
           <View style={styles.quantityRow}>
             <Text style={styles.quantityLabel}>Qty</Text>
@@ -345,88 +430,139 @@ const ProductDetails = ({ route, navigation }) => {
             <Text style={styles.sectionTitle}>Description</Text>
             <View style={styles.sectionContent}>
               <Text style={styles.descriptionText}>
-                {product.description || "Get radiant, glowing skin with this premium serum. Formulated with natural ingredients for all skin types. This lightweight formula absorbs quickly and provides long-lasting hydration while improving skin texture and appearance."}
-              </Text>
-              
-              <Text style={styles.benefitsTitle}>Key Benefits:</Text>
-              {mockProductData.features.slice(0, 4).map((feature, index) => (
-                <View key={index} style={styles.benefitRow}>
-                  <Text style={styles.bulletPoint}>• </Text>
-                  <Text style={styles.benefitText}>{feature}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Ingredients Section */}
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Ingredients</Text>
-            <View style={styles.sectionContent}>
-              <Text style={styles.ingredientsText}>
-                {mockProductData.ingredients.join(', ')}
+                {product.description}
               </Text>
             </View>
           </View>
-
-          {/* How to Use Section */}
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>How to use</Text>
-            <View style={styles.sectionContent}>
-              {mockProductData.usageInstructions.map((instruction, index) => (
-                <View key={index} style={styles.instructionRow}>
-                  <Text style={styles.stepNumber}>{index + 1}. </Text>
-                  <Text style={styles.instructionText}>{instruction}</Text>
-                </View>
-              ))}
-            </View>
+<View style={styles.sectionContainer}>
+  <View style={styles.reviewsHeader}>
+    <Text style={styles.sectionTitle}>Rating & Reviews</Text>
+    {reviews.length > 3 && (
+      <TouchableOpacity
+        onPress={() => navigation.navigate('ReviewsScreen', {
+          itemId: product._id,
+          itemType: 'product',
+          itemName: product.name
+        })}
+      >
+        <Text style={styles.viewAllText}>View All</Text>
+      </TouchableOpacity>
+    )}
+  </View>
+  <View style={styles.sectionContent}>
+    {reviewsLoading ? (
+      <ActivityIndicator size="small" color="#FF6B9D" />
+    ) : reviewSummary && reviewSummary.total > 0 ? (
+      <>
+        <View style={styles.overallRating}>
+          <Text style={styles.ratingNumber}>
+            {(Object.entries(reviewSummary.breakdown).reduce(
+              (acc, [rating, count]) => acc + (parseInt(rating) * count),
+              0
+            ) / reviewSummary.total).toFixed(1)}
+          </Text>
+          <View style={styles.ratingDetails}>
+            {renderStarRating(
+              Object.entries(reviewSummary.breakdown).reduce(
+                (acc, [rating, count]) => acc + (parseInt(rating) * count),
+                0
+              ) / reviewSummary.total,
+              18
+            )}
+            <Text style={styles.ratingCount}>
+              {reviewSummary.total} rating{reviewSummary.total !== 1 ? 's' : ''}
+            </Text>
           </View>
+        </View>
 
-          {/* Rating & Reviews Section */}
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Rating & reviews</Text>
-            <View style={styles.sectionContent}>
-              <View style={styles.overallRating}>
-                <Text style={styles.ratingNumber}>{mockProductData.ratings.average}</Text>
-                <View style={styles.ratingDetails}>
-                  {renderStarRating(mockProductData.ratings.average, 18)}
-                  <Text style={styles.ratingCount}>
-                    {mockProductData.ratings.total} ratings
-                  </Text>
-                </View>
-              </View>
-
-              {/* Rating Breakdown */}
-              <View style={styles.ratingBreakdown}>
-                {[5, 4, 3, 2, 1].map(star => {
-                  const count = mockProductData.ratings.breakdown[star];
-                  const percentage = (count / mockProductData.ratings.total) * 100;
-                  return (
-                    <View key={star} style={styles.ratingRow}>
-                      <Text style={styles.starLabel}>{star}</Text>
-                      <View style={styles.ratingBarContainer}>
-                        <View style={styles.ratingBar}>
-                          <View style={[styles.ratingFill, { width: `${percentage}%` }]} />
-                        </View>
-                      </View>
-                      <Text style={styles.ratingPercentage}>{Math.round(percentage)}%</Text>
-                    </View>
-                  );
-                })}
-              </View>
-
-              {/* Individual Reviews */}
-              {mockProductData.reviews.slice(0, 3).map((review) => (
-                <View key={review.id} style={styles.reviewItem}>
-                  <View style={styles.reviewHeader}>
-                    <Text style={styles.reviewerName}>{review.user}</Text>
-                    {renderStarRating(review.rating, 12)}
+        {/* Rating Breakdown */}
+        <View style={styles.ratingBreakdown}>
+          {[5, 4, 3, 2, 1].map(star => {
+            const count = reviewSummary.breakdown[star] || 0;
+            const percentage = reviewSummary.total > 0 
+              ? (count / reviewSummary.total) * 100 
+              : 0;
+            return (
+              <View key={star} style={styles.ratingRow}>
+                <Text style={styles.starLabel}>{star}</Text>
+                <View style={styles.ratingBarContainer}>
+                  <View style={styles.ratingBar}>
+                    <View style={[styles.ratingFill, { width: `${percentage}%` }]} />
                   </View>
-                  <Text style={styles.reviewText}>{review.comment}</Text>
-                  <Text style={styles.reviewDate}>{review.date}</Text>
                 </View>
-              ))}
+                <Text style={styles.ratingPercentage}>{Math.round(percentage)}%</Text>
+              </View>
+            );
+          })}
+        </View>
+
+        {/* Individual Reviews */}
+        {reviews.slice(0, 3).map((review) => (
+          <View key={review._id} style={styles.reviewItem}>
+            <View style={styles.reviewHeader}>
+              <View style={styles.reviewerInfo}>
+                {review.user?.profilePicture ? (
+                  <Image
+                    source={{ uri: review.user.profilePicture }}
+                    style={styles.reviewerAvatar}
+                  />
+                ) : (
+                  <View style={styles.reviewerAvatarPlaceholder}>
+                    <Text style={styles.avatarText}>
+                      {review.user?.name?.charAt(0).toUpperCase() || 'U'}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.reviewerDetails}>
+                  <View style={styles.reviewerNameRow}>
+                    <Text style={styles.reviewerName}>
+                      {review.user?.name || 'Anonymous'}
+                    </Text>
+                    {review.isVerifiedPurchase && (
+                      <View style={styles.verifiedBadge}>
+                        <Icon name="checkmark-circle" size={12} color="#2ECC71" />
+                        <Text style={styles.verifiedText}>Verified</Text>
+                      </View>
+                    )}
+                  </View>
+                  {renderStarRating(review.rating, 12)}
+                </View>
+              </View>
             </View>
+            {review.comment && (
+              <Text style={styles.reviewText}>{review.comment}</Text>
+            )}
+            {review.media && review.media.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.reviewMediaContainer}
+              >
+                {review.media.map((media, idx) => (
+                  <Image
+                    key={idx}
+                    source={{ uri: media.url }}
+                    style={styles.reviewMediaImage}
+                    resizeMode="cover"
+                  />
+                ))}
+              </ScrollView>
+            )}
+            <Text style={styles.reviewDate}>{formatDate(review.createdAt)}</Text>
           </View>
+        ))}
+      </>
+    ) : (
+      <View style={styles.noReviewsContainer}>
+        <Icon name="chatbubble-outline" size={48} color="#CCC" />
+        <Text style={styles.noReviewsText}>No reviews yet</Text>
+        <Text style={styles.noReviewsSubtext}>
+          Be the first to review this product!
+        </Text>
+      </View>
+    )}
+  </View>
+</View>
         </View>
       </ScrollView>
 
@@ -777,6 +913,90 @@ addToCartText: {
   fontSize: 16,
   fontWeight: '600',
   color: '#FFFFFF',
+},
+reviewsHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 12,
+},
+viewAllText: {
+  fontSize: 14,
+  color: '#FF6B9D',
+  fontWeight: '600',
+},
+reviewerInfo: {
+  flexDirection: 'row',
+  alignItems: 'center',
+},
+reviewerAvatar: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  backgroundColor: '#E0E0E0',
+},
+reviewerAvatarPlaceholder: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  backgroundColor: '#FF6B9D',
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+avatarText: {
+  fontSize: 16,
+  fontWeight: '700',
+  color: '#FFF',
+},
+reviewerDetails: {
+  marginLeft: 12,
+  flex: 1,
+},
+reviewerNameRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginBottom: 4,
+},
+verifiedBadge: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#E8F8F5',
+  paddingHorizontal: 6,
+  paddingVertical: 2,
+  borderRadius: 10,
+  gap: 4,
+},
+verifiedText: {
+  fontSize: 10,
+  fontWeight: '600',
+  color: '#2ECC71',
+},
+reviewMediaContainer: {
+  marginTop: 12,
+  marginBottom: 8,
+},
+reviewMediaImage: {
+  width: 80,
+  height: 80,
+  borderRadius: 8,
+  marginRight: 8,
+  backgroundColor: '#E0E0E0',
+},
+noReviewsContainer: {
+  alignItems: 'center',
+  paddingVertical: 40,
+},
+noReviewsText: {
+  fontSize: 16,
+  fontWeight: '600',
+  color: '#666',
+  marginTop: 16,
+  marginBottom: 8,
+},
+noReviewsSubtext: {
+  fontSize: 14,
+  color: '#999',
+  textAlign: 'center',
 },
 });
 

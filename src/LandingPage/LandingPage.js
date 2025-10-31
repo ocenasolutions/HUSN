@@ -1,349 +1,371 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Dimensions,
-  Animated,
-  StatusBar,
-  ImageBackground,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Animated, StyleSheet, Dimensions } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { useAuth } from '../contexts/AuthContext';
+
 const { width, height } = Dimensions.get('window');
 
-const beautyImages = [
-  require('./assets/1.jpg'),
-  require('./assets/2.jpg'),
-  require('./assets/3.jpg'),
-  require('./assets/4.jpg'),
-];
-
 const LandingPage = ({ navigation }) => {
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  const buttonAnim = useRef(new Animated.Value(0)).current;
-  const titleAnim = useRef(new Animated.Value(50)).current;
-  const subtitleAnim = useRef(new Animated.Value(30)).current;
-  const logoAnim = useRef(new Animated.Value(-50)).current;
+  const { user } = useAuth();
   
-  // Floating animations for decorative elements
-  const bubble1Anim = useRef(new Animated.Value(0)).current;
-  const bubble2Anim = useRef(new Animated.Value(0)).current;
-  const bubble3Anim = useRef(new Animated.Value(0)).current;
-  const smokeAnim = useRef(new Animated.Value(0)).current;
-  const heartAnim = useRef(new Animated.Value(0)).current;
-  const sparkleAnim = useRef(new Animated.Value(0)).current;
+  const hOpacity = useRef(new Animated.Value(0)).current;
+  const hScale = useRef(new Animated.Value(8)).current;
+  
+  const uOpacity = useRef(new Animated.Value(0)).current;
+  const sOpacity = useRef(new Animated.Value(0)).current;
+  const nOpacity = useRef(new Animated.Value(0)).current;
+  
+  const usnScale = useRef(new Animated.Value(0.8)).current;
+  
+  const subtitleOpacity = useRef(new Animated.Value(0)).current;
+  const subtitleTranslateY = useRef(new Animated.Value(20)).current;
+  
+  const fullWordOpacity = useRef(new Animated.Value(1)).current;
+  
+  const [particles] = useState(() => 
+    Array.from({ length: 20 }, () => ({
+      translateX: useRef(new Animated.Value(Math.random() * width)).current,
+      translateY: useRef(new Animated.Value(Math.random() * height)).current,
+      scale: useRef(new Animated.Value(Math.random() * 0.5 + 0.5)).current,
+      opacity: useRef(new Animated.Value(Math.random() * 0.4 + 0.2)).current,
+      size: Math.random() * 30 + 20,
+      duration: Math.random() * 8000 + 12000,
+    }))
+  );
+  
+  const wave1 = useRef(new Animated.Value(0)).current;
+  const wave2 = useRef(new Animated.Value(0)).current;
+  const wave3 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Initial animations
-    Animated.parallel([
-      Animated.spring(logoAnim, {
-        toValue: 0,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.spring(titleAnim, {
-        toValue: 0,
-        duration: 1000,
-        delay: 200,
-        useNativeDriver: true,
-      }),
-      Animated.spring(subtitleAnim, {
-        toValue: 0,
-        duration: 1200,
-        delay: 400,
-        useNativeDriver: true,
-      }),
-      Animated.spring(buttonAnim, {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    
+    particles.forEach((particle, index) => {
+      const animateParticle = () => {
+        Animated.loop(
+          Animated.parallel([
+            Animated.sequence([
+              Animated.timing(particle.translateY, {
+                toValue: Math.random() * height,
+                duration: particle.duration,
+                useNativeDriver: true,
+              }),
+              Animated.timing(particle.translateY, {
+                toValue: Math.random() * height,
+                duration: particle.duration,
+                useNativeDriver: true,
+              }),
+            ]),
+            Animated.sequence([
+              Animated.timing(particle.translateX, {
+                toValue: Math.random() * width,
+                duration: particle.duration * 0.8,
+                useNativeDriver: true,
+              }),
+              Animated.timing(particle.translateX, {
+                toValue: Math.random() * width,
+                duration: particle.duration * 0.8,
+                useNativeDriver: true,
+              }),
+            ]),
+            Animated.loop(
+              Animated.sequence([
+                Animated.timing(particle.opacity, {
+                  toValue: Math.random() * 0.6 + 0.3,
+                  duration: 3000,
+                  useNativeDriver: true,
+                }),
+                Animated.timing(particle.opacity, {
+                  toValue: Math.random() * 0.3 + 0.1,
+                  duration: 3000,
+                  useNativeDriver: true,
+                }),
+              ])
+            ),
+            Animated.loop(
+              Animated.sequence([
+                Animated.timing(particle.scale, {
+                  toValue: Math.random() * 0.5 + 0.8,
+                  duration: 4000,
+                  useNativeDriver: true,
+                }),
+                Animated.timing(particle.scale, {
+                  toValue: Math.random() * 0.5 + 0.5,
+                  duration: 4000,
+                  useNativeDriver: true,
+                }),
+              ])
+            ),
+          ])
+        ).start();
+      };
+      
+      setTimeout(() => animateParticle(), index * 100);
+    });
+    
+    // Animate waves
+    Animated.loop(
+      Animated.timing(wave1, {
         toValue: 1,
-        duration: 1400,
-        delay: 600,
+        duration: 8000,
+        useNativeDriver: true,
+      })
+    ).start();
+    
+    Animated.loop(
+      Animated.timing(wave2, {
+        toValue: 1,
+        duration: 10000,
+        useNativeDriver: true,
+      })
+    ).start();
+    
+    Animated.loop(
+      Animated.timing(wave3, {
+        toValue: 1,
+        duration: 12000,
+        useNativeDriver: true,
+      })
+    ).start();
+
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(hOpacity, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.spring(hScale, {
+          toValue: 6.5,
+          tension: 25,
+          friction: 7,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.delay(300),
+      Animated.spring(hScale, {
+        toValue: 1,
+        tension: 40,
+        friction: 8,
         useNativeDriver: true,
       }),
-    ]).start();
-
-    // Image cycling animation
-    const imageInterval = setInterval(() => {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 1.1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setCurrentImageIndex((prev) => (prev + 1) % beautyImages.length);
-        
-        scaleAnim.setValue(0.9);
+    ]).start(() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
+      Animated.stagger(200, [
         Animated.parallel([
-          Animated.timing(fadeAnim, {
+          Animated.timing(uOpacity, {
             toValue: 1,
             duration: 500,
             useNativeDriver: true,
           }),
-          Animated.spring(scaleAnim, {
+          Animated.spring(usnScale, {
             toValue: 1,
-            duration: 800,
+            tension: 50,
+            friction: 7,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.timing(sOpacity, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(nOpacity, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        Animated.parallel([
+          Animated.timing(subtitleOpacity, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.spring(subtitleTranslateY, {
+            toValue: 0,
+            tension: 50,
+            friction: 8,
             useNativeDriver: true,
           }),
         ]).start();
+        
+        setTimeout(() => {
+          Animated.timing(fullWordOpacity, {
+            toValue: 0,
+            duration: 1000,
+            useNativeDriver: true,
+          }).start(() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            setTimeout(() => {
+              if (user) {
+                navigation.replace('Home'); 
+              } else {
+                navigation.replace('SignUp');
+              }
+            }, 100);
+          });
+        }, 1500);
       });
-    }, 4000);
-
-    // Floating bubbles animation
-    const createBubbleAnimation = (animValue, duration, delay = 0) => {
-      const animate = () => {
-        Animated.sequence([
-          Animated.timing(animValue, {
-            toValue: -20,
-            duration: duration,
-            delay: delay,
-            useNativeDriver: true,
-          }),
-          Animated.timing(animValue, {
-            toValue: 10,
-            duration: duration,
-            useNativeDriver: true,
-          }),
-        ]).start(() => animate());
-      };
-      animate();
-    };
-    const smokeAnimation = () => {
-      Animated.sequence([
-        Animated.timing(smokeAnim, {
-          toValue: 1,
-          duration: 3000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(smokeAnim, {
-          toValue: 0,
-          duration: 2000,
-          useNativeDriver: true,
-        }),
-      ]).start(() => smokeAnimation());
-    };
-
-    // Heart pulse animation
-    const heartPulse = () => {
-      Animated.sequence([
-        Animated.timing(heartAnim, {
-          toValue: 1.2,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(heartAnim, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ]).start(() => setTimeout(heartPulse, 2000));
-    };
-
-    // Sparkle twinkle animation
-    const sparkleAnimation = () => {
-      Animated.sequence([
-        Animated.timing(sparkleAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(sparkleAnim, {
-          toValue: 0.3,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ]).start(() => sparkleAnimation());
-    };
-
-    // Start all animations
-    createBubbleAnimation(bubble1Anim, 2500, 0);
-    createBubbleAnimation(bubble2Anim, 3000, 500);
-    createBubbleAnimation(bubble3Anim, 2800, 1000);
-    smokeAnimation();
-    heartPulse();
-    sparkleAnimation();
-
-    return () => clearInterval(imageInterval);
-  }, []);
-
-  const handleGetStarted = () => {
-    Animated.sequence([
-      Animated.timing(buttonAnim, {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(buttonAnim, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      navigation.navigate('SignUp');
     });
-  };
+  }, [user, navigation]);
+
+  const wave1Scale = wave1.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 1.2, 1],
+  });
+  
+  const wave1Opacity = wave1.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0.15, 0.25, 0.15],
+  });
+  
+  const wave2Scale = wave2.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 1.15, 1],
+  });
+  
+  const wave2Opacity = wave2.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0.2, 0.3, 0.2],
+  });
+  
+  const wave3Scale = wave3.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 1.1, 1],
+  });
+  
+  const wave3Opacity = wave3.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0.1, 0.2, 0.1],
+  });
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-      
-      {/* Background Image with Animation */}
-      <Animated.View
+      {/* Animated Wave Backgrounds */}
+      <Animated.View 
         style={[
-          styles.imageContainer,
+          styles.wave,
+          styles.wave1,
           {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
+            opacity: wave1Opacity,
+            transform: [{ scale: wave1Scale }],
           },
         ]}
-      >
-        <ImageBackground
-          source={beautyImages[currentImageIndex]}
-          style={styles.backgroundImage}
-          resizeMode="cover"
-        >
-          {/* Elegant Gradient Overlay */}
-          <LinearGradient
-            colors={[
-              'rgba(255,192,203,0.2)', 
-              'rgba(255,182,193,0.4)', 
-              'rgba(255,105,180,0.6)',
-              'rgba(219,112,147,0.8)'
-            ]}
-            style={styles.gradientOverlay}
-          />
-        </ImageBackground>
-      </Animated.View>
-
-      {/* Top Logo */}
-      <Animated.View
+      />
+      
+      <Animated.View 
         style={[
-          styles.topLogoContainer,
-          { transform: [{ translateY: logoAnim }] }
+          styles.wave,
+          styles.wave2,
+          {
+            opacity: wave2Opacity,
+            transform: [{ scale: wave2Scale }],
+          },
+        ]}
+      />
+      
+      <Animated.View 
+        style={[
+          styles.wave,
+          styles.wave3,
+          {
+            opacity: wave3Opacity,
+            transform: [{ scale: wave3Scale }],
+          },
+        ]}
+      />
+      
+      {/* Floating Particles */}
+      {particles.map((particle, index) => (
+        <Animated.View
+          key={index}
+          style={[
+            styles.particle,
+            {
+              width: particle.size,
+              height: particle.size,
+              opacity: particle.opacity,
+              transform: [
+                { translateX: particle.translateX },
+                { translateY: particle.translateY },
+                { scale: particle.scale },
+              ],
+              backgroundColor: index % 3 === 0 ? '#CA217C' : index % 3 === 1 ? '#ffffff' : '#FF69B4',
+            },
+          ]}
+        />
+      ))}
+      
+      {/* Word Container */}
+      <Animated.View 
+        style={[
+          styles.contentContainer,
+          { opacity: fullWordOpacity }
         ]}
       >
-        <Text style={styles.topLogo}>HUSN</Text>
-      </Animated.View>
-
-      {/* Main Content - Bottom Left */}
-      <View style={styles.contentContainer}>
-        <Animated.View
-          style={[
-            styles.textContainer,
-            { transform: [{ translateY: titleAnim }] }
-          ]}
-        >
-          <Text style={styles.mainTitle}>Husn</Text>
-          <Animated.View
+        <View style={styles.wordContainer}>
+          <Animated.Text
             style={[
-              styles.subtitleContainer,
-              { transform: [{ translateY: subtitleAnim }] }
+              styles.letter,
+              styles.letterH,
+              {
+                opacity: hOpacity,
+                transform: [{ scale: hScale }],
+              },
             ]}
           >
-            <Text style={styles.subtitle}>Beauty Salon</Text>
-            <Text style={styles.tagline}>Where elegance meets beauty</Text>
-          </Animated.View>
-        </Animated.View>
-
-        {/* Get Started Button */}
-        <Animated.View
+            H
+          </Animated.Text>
+          <Animated.Text
+            style={[
+              styles.letter,
+              {
+                opacity: uOpacity,
+                transform: [{ scale: usnScale }],
+              },
+            ]}
+          >
+            U
+          </Animated.Text>
+          <Animated.Text
+            style={[
+              styles.letter,
+              {
+                opacity: sOpacity,
+                transform: [{ scale: usnScale }],
+              },
+            ]}
+          >
+            S
+          </Animated.Text>
+          <Animated.Text
+            style={[
+              styles.letter,
+              {
+                opacity: nOpacity,
+                transform: [{ scale: usnScale }],
+              },
+            ]}
+          >
+            N
+          </Animated.Text>
+        </View>
+        
+        <Animated.Text
           style={[
-            styles.buttonContainer,
-            { 
-              opacity: buttonAnim,
-              transform: [{ scale: buttonAnim }]
-            }
+            styles.subtitle,
+            {
+              opacity: subtitleOpacity,
+              transform: [{ translateY: subtitleTranslateY }],
+            },
           ]}
         >
-          <TouchableOpacity
-            style={styles.getStartedButton}
-            onPress={handleGetStarted}
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={['#FF69B4', '#FF1493', '#DC143C']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.buttonGradient}
-            >
-              <Text style={styles.buttonText}>Discover Beauty</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </Animated.View>
-      </View>
-
-      {/* Floating Decorative Elements */}
-      {/* Bubbles */}
-      <Animated.View
-        style={[
-          styles.bubble1,
-          { transform: [{ translateY: bubble1Anim }] }
-        ]}
-      />
-      <Animated.View
-        style={[
-          styles.bubble2,
-          { transform: [{ translateY: bubble2Anim }] }
-        ]}
-      />
-      <Animated.View
-        style={[
-          styles.bubble3,
-          { transform: [{ translateY: bubble3Anim }] }
-        ]}
-      />
-
-      {/* Smoke/Mist Effect */}
-      <Animated.View
-        style={[
-          styles.smokeEffect,
-          { opacity: smokeAnim }
-        ]}
-      />
-
-      {/* Heart Shape */}
-      <Animated.View
-        style={[
-          styles.heartShape,
-          { transform: [{ scale: heartAnim }] }
-        ]}
-      >
-        <Text style={styles.heartIcon}>♥</Text>
+          Beauty Salon
+        </Animated.Text>
       </Animated.View>
-
-      {/* Sparkles */}
-      <Animated.View
-        style={[
-          styles.sparkle1,
-          { opacity: sparkleAnim }
-        ]}
-      >
-        <Text style={styles.sparkleIcon}>✨</Text>
-      </Animated.View>
-      <Animated.View
-        style={[
-          styles.sparkle2,
-          { opacity: sparkleAnim }
-        ]}
-      >
-        <Text style={styles.sparkleIcon}>✦</Text>
-      </Animated.View>
-
-      {/* Flower petals */}
-      <View style={styles.petal1}>
-        <Text style={styles.petalIcon}>🌸</Text>
-      </View>
-      <View style={styles.petal2}>
-        <Text style={styles.petalIcon}>🌺</Text>
-      </View>
     </View>
   );
 };
@@ -351,204 +373,72 @@ const LandingPage = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFB6C1',
+    backgroundColor: '#F7DFF1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
   },
-  imageContainer: {
+  wave: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    borderRadius: 9999,
   },
-  backgroundImage: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
+  wave1: {
+    width: width * 1.5,
+    height: width * 1.5,
+    backgroundColor: '#CA217C',
+    top: -width * 0.5,
+    left: -width * 0.25,
   },
-  gradientOverlay: {
-    ...StyleSheet.absoluteFillObject,
+  wave2: {
+    width: width * 1.8,
+    height: width * 1.8,
+    backgroundColor: '#ffffff',
+    bottom: -width * 0.7,
+    right: -width * 0.4,
   },
-  topLogoContainer: {
+  wave3: {
+    width: width * 1.3,
+    height: width * 1.3,
+    backgroundColor: '#FF69B4',
+    top: height * 0.6,
+    left: -width * 0.3,
+  },
+  particle: {
     position: 'absolute',
-    top: StatusBar.currentHeight + 30,
-    left: 30,
-    zIndex: 10,
-  },
-  topLogo: {
-    fontSize: 42,
-    fontWeight: '200',
-    color: '#FFFFFF',
-    letterSpacing: 3,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    borderRadius: 9999,
   },
   contentContainer: {
-    position: 'absolute',
-    bottom: 80,
-    left: 30,
-    right: 30,
+    alignItems: 'center',
+    zIndex: 10,
   },
-  textContainer: {
-    marginBottom: 40,
+  wordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  mainTitle: {
-    fontSize: 56,
-    fontWeight: '200',
-    color: '#FFFFFF',
-    letterSpacing: 4,
-    marginBottom: 5,
-    textShadowColor: 'rgba(0,0,0,0.4)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
+  letter: {
+    fontSize: 80,
+    fontWeight: '700',
+    color: '#CA217C',
+    letterSpacing: 2,
+    textShadowColor: '#44190030',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 12,
   },
-  subtitleContainer: {
-    marginLeft: 5,
+  letterH: {
+    fontSize: 80,
+    fontWeight: '700',
   },
   subtitle: {
     fontSize: 24,
-    fontWeight: '300',
-    color: '#FFFFFF',
-    letterSpacing: 2,
-    marginBottom: 8,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  tagline: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    letterSpacing: 1,
-    opacity: 0.9,
-    fontStyle: 'italic',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  buttonContainer: {
-    alignItems: 'flex-start',
-  },
-  getStartedButton: {
-    width: width * 0.6,
-    height: 55,
-    borderRadius: 28,
-    overflow: 'hidden',
-    elevation: 10,
-    shadowColor: '#FF1493',
-    shadowOffset: {
-      width: 0,
-      height: 5,
-    },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-  },
-  buttonGradient: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
     fontWeight: '600',
-    letterSpacing: 1.5,
-    marginRight: 8,
-  },
-  buttonIcon: {
-    fontSize: 14,
-    color: '#FFFFFF',
-  },
-  subButtonText: {
+    color: '#441900',
+    letterSpacing: 6,
     marginTop: 12,
-  },
-  subButtonTextContent: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-    letterSpacing: 0.5,
-    fontStyle: 'italic',
-  },
-  // Decorative Elements
-  bubble1: {
-    position: 'absolute',
-    top: '15%',
-    right: '10%',
-    width: 25,
-    height: 25,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-    borderRadius: 12.5,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
-  },
-  bubble2: {
-    position: 'absolute',
-    top: '35%',
-    right: '20%',
-    width: 18,
-    height: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
-  },
-  bubble3: {
-    position: 'absolute',
-    top: '25%',
-    right: '5%',
-    width: 12,
-    height: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.7)',
-  },
-  smokeEffect: {
-    position: 'absolute',
-    top: '20%',
-    left: '15%',
-    width: 60,
-    height: 60,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 30,
-    blur: 10,
-  },
-  heartShape: {
-    position: 'absolute',
-    top: '40%',
-    left: '20%',
-  },
-  heartIcon: {
-    fontSize: 20,
-    color: 'rgba(255, 182, 193, 0.8)',
-  },
-  sparkle1: {
-    position: 'absolute',
-    top: '30%',
-    right: '15%',
-  },
-  sparkle2: {
-    position: 'absolute',
-    top: '50%',
-    left: '10%',
-  },
-  sparkleIcon: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.9)',
-  },
-  petal1: {
-    position: 'absolute',
-    top: '60%',
-    right: '8%',
-    opacity: 0.6,
-  },
-  petal2: {
-    position: 'absolute',
-    top: '45%',
-    right: '25%',
-    opacity: 0.5,
-  },
-  petalIcon: {
-    fontSize: 14,
+    textTransform: 'uppercase',
+    textShadowColor: '#ffffff80',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
 });
 

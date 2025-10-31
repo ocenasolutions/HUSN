@@ -78,7 +78,7 @@ const Footer = () => {
                 <Icon
                   name={isFocused ? tab.activeIcon : tab.icon}
                   size={isFocused ? 26 : 24}
-                  color={isFocused ? '#fff' : '#B8B8B8'}
+                  color={isFocused ? '#FF6B9D' : '#B8B8B8'}
                 />
               </View>
               <Text
@@ -98,8 +98,6 @@ const Footer = () => {
 const styles = StyleSheet.create({
   footer: {
     backgroundColor: '#ffffffff',
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,
@@ -134,12 +132,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   activeIconContainer: {
-    backgroundColor: '#FF6B9D',
-    shadowColor: '#FF6B9D',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    backgroundColor: 'transparent',
   },
   tabLabel: {
     fontSize: 10, 

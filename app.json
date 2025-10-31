@@ -2,7 +2,7 @@
   "expo": {
     "name": "HUSN",
     "slug": "HUSN",
-    "scheme": "HUSNapp",  
+    "scheme": "HUSNapp",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/HUSN.png",
@@ -14,7 +14,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.husn.application"
     },
     "android": {
       "adaptiveIcon": {
@@ -22,10 +23,13 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.ocena.NewProject"
+      "package": "com.husn.application"
     },
     "web": {
       "favicon": "./assets/HUSN.png"
-    }
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }

@@ -1,4 +1,3 @@
-// src/Pages/Services/ServiceDetails.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -7,144 +6,79 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  TextInput,
   Alert,
   ActivityIndicator,
   SafeAreaView,
-  FlatList,
-  Dimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { API_URL } from '../../API/config';
 import Header from '../../Components/Header';
 import { useAuth } from '../../contexts/AuthContext'; 
 
-const { width } = Dimensions.get('window');
-
 const ServiceDetails = ({ navigation, route }) => {
   const { service } = route.params;
-  const { tokens } = useAuth(); 
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedTime, setSelectedTime] = useState('');
+  const { user, tokens } = useAuth(); 
   const [quantity, setQuantity] = useState(1);
-  const [notes, setNotes] = useState('');
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [selectedServiceType, setSelectedServiceType] = useState('At Home');
-  const [selectedProfessional, setSelectedProfessional] = useState(null);
+  const [isInCart, setIsInCart] = useState(false);
   const [reviews, setReviews] = useState([]);
-  const [reviewsLoading, setReviewsLoading] = useState(false);
-  const [otherServices, setOtherServices] = useState([]);
-  const [otherServicesLoading, setOtherServicesLoading] = useState(false);
-  const [cartItemCount, setCartItemCount] = useState(0);
-
-  // Mock data for professionals
-  const mockProfessionals = [
-    {
-      id: '1',
-      name: 'Aditya',
-      rating: 4.8,
-      reviews: 2847,
-      experience: '5+ years experience',
-      image: 'https://images.unsplash.com/photo-1494790108755-2616b332c5aa?w=150&h=150&fit=crop&crop=face',
-      specialty: 'Facial Specialist',
-      price: service.price
-    },
-    {
-      id: '2',
-      name: 'Jhon',
-      rating: 4.9,
-      reviews: 3254,
-      experience: '7+ years experience',
-      image: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face',
-      specialty: 'Senior Facial Specialist',
-      price: service.price + 200
-    },
-    {
-      id: '3',
-      name: 'David',
-      rating: 4.7,
-      reviews: 1892,
-      experience: '4+ years experience',
-      image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&h=150&fit=crop&crop=face',
-      specialty: 'Skincare Expert',
-      price: service.price + 150
-    }
-  ];
-
-  const timeSlots = [
-    '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-    '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'
-  ];
+  const [reviewsLoading, setReviewsLoading] = useState(false);  
+  const [showAllReviews, setShowAllReviews] = useState(false);
+  const [selectedRatingFilter, setSelectedRatingFilter] = useState('all');
 
   useEffect(() => {
+    checkIfInCart();
     fetchReviews();
-    fetchOtherServices();
-    if (mockProfessionals.length > 0) {
-      setSelectedProfessional(mockProfessionals[0]);
-    }
   }, []);
-  
+
+  const checkIfInCart = async () => {
+    try {
+      const response = await fetch(`${API_URL}/cart`, {
+        headers: {
+          'Authorization': `Bearer ${tokens?.accessToken}`,
+        },
+      });
+      const data = await response.json();
+      if (data.success) {
+        const inCart = data.data.items.some(item => item.service?._id === service._id);
+        setIsInCart(inCart);
+      }
+    } catch (error) {
+      console.error('Check cart error:', error);
+    }
+  };
+
   const fetchReviews = async () => {
     try {
       setReviewsLoading(true);
-      const response = await fetch(`${API_URL}/services/${service._id}/reviews`);
+      const response = await fetch(`${API_URL}/reviews/service/${service._id}`);
       const data = await response.json();
       
       if (data.success) {
-        setReviews(data.reviews || []);
+        setReviews(data.data?.reviews || []);
+      } else {
+        setReviews([]);
       }
     } catch (error) {
       console.error('Fetch reviews error:', error);
+      setReviews([]);
     } finally {
       setReviewsLoading(false);
     }
   };
 
-  const fetchOtherServices = async () => {
-    try {
-      setOtherServicesLoading(true);
-      const response = await fetch(
-        `${API_URL}/services?category=${service.category}&limit=6&exclude=${service._id}`
-      );
-      const data = await response.json();
-      
-      if (data.success) {
-        setOtherServices(data.data || []);
-      }
-    } catch (error) {
-      console.error('Fetch other services error:', error);
-    } finally {
-      setOtherServicesLoading(false);
-    }
-  };
-
-  const handleDateChange = (event, date) => {
-    setShowDatePicker(false);
-    if (date) {
-      setSelectedDate(date);
-    }
-  };
-
   const handleAddToCart = async () => {
-    if (!selectedTime) {
-      Alert.alert('Error', 'Please select a time slot');
-      return;
-    }
-
-    if (!selectedProfessional) {
-      Alert.alert('Error', 'Please select a professional');
-      return;
-    }
-
     if (!tokens?.accessToken) {
-      Alert.alert('Error', 'Authentication required. Please login again.');
+      Alert.alert('Login Required', 'Please login to add items to cart');
       return;
     }
-
     try {
       setLoading(true);
+      const cartData = {
+        serviceId: service._id,
+        quantity,
+        price: service.price
+      };
 
       const response = await fetch(`${API_URL}/cart/add`, {
         method: 'POST',
@@ -152,33 +86,18 @@ const ServiceDetails = ({ navigation, route }) => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${tokens.accessToken}`,
         },
-        body: JSON.stringify({
-          serviceId: service._id,
-          quantity,
-          selectedDate: selectedDate.toISOString(),
-          selectedTime: selectedTime,
-          notes,
-          serviceType: selectedServiceType,
-          professionalId: selectedProfessional.id,
-          professionalName: selectedProfessional.name,
-          totalPrice: selectedProfessional.price * quantity
-        }),
+        body: JSON.stringify(cartData),
       });
-
       const data = await response.json();
-
       if (data.success) {
-        // Update cart count
-        setCartItemCount(prev => prev + 1);
-        
-        // Show success message with options
+        setIsInCart(true);
         Alert.alert(
-          'Added to Cart!', 
-          `${service.name} has been added to your cart successfully!`,
+          '✓ Added to Cart!', 
+          `${service.name} has been added to your cart. You can schedule time and select professional during checkout.`,
           [
             {
               text: 'Continue Shopping',
-              style: 'cancel',
+              onPress: () => navigation.goBack()
             },
             {
               text: 'View Cart',
@@ -187,7 +106,7 @@ const ServiceDetails = ({ navigation, route }) => {
           ]
         );
       } else {
-        Alert.alert('Error', data.message || 'Failed to add service to cart');
+        Alert.alert('Error', data.message || 'Failed to add to cart');
       }
     } catch (error) {
       console.error('Add to cart error:', error);
@@ -197,13 +116,10 @@ const ServiceDetails = ({ navigation, route }) => {
     }
   };
 
-  const formatDate = (date) => {
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric'
-    });
+  const handleViewCart = () => {
+    navigation.navigate('ViewCart');
   };
+  const totalPrice = service.price * quantity;
 
   const renderStars = (rating) => {
     const stars = [];
@@ -222,49 +138,28 @@ const ServiceDetails = ({ navigation, route }) => {
     return stars;
   };
 
-  const renderProfessionalItem = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.professionalCard,
-        selectedProfessional?.id === item.id && styles.selectedProfessionalCard
-      ]}
-      onPress={() => setSelectedProfessional(item)}
-    >
-      <Image 
-        source={{ uri: item.image }}
-        style={styles.professionalImage}
-        resizeMode="cover"
-      />
-      <View style={styles.professionalInfo}>
-        <Text style={styles.professionalName}>{item.name}</Text>
-        <Text style={styles.professionalSpecialty}>{item.specialty}</Text>
-        <Text style={styles.professionalExperience}>{item.experience}</Text>
-        <View style={styles.professionalRating}>
-          <Icon name="star" size={14} color="#FFD700" />
-          <Text style={styles.ratingText}>{item.rating} ({item.reviews})</Text>
-        </View>
-      </View>
-      <View style={styles.selectContainer}>
-        {selectedProfessional?.id === item.id ? (
-          <Icon name="checkmark-circle" size={24} color="#FF6B9D" />
-        ) : (
-          <View style={styles.selectButton}>
-            <Text style={styles.selectText}>Select</Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
+  const getFilteredReviews = () => {
+    if (selectedRatingFilter === 'all') {
+      return reviews;
+    }
+    return reviews.filter(review => review.rating === parseInt(selectedRatingFilter));
+  };
 
-  const totalPrice = selectedProfessional ? selectedProfessional.price * quantity : service.price * quantity;
-  const averageRating = reviews.length > 0 
-    ? (reviews.reduce((sum, review) => sum + (review.rating || 0), 0) / reviews.length).toFixed(1)
-    : service.rating || 0;
+  const getDisplayedReviews = () => {
+    const filtered = getFilteredReviews();
+    return showAllReviews ? filtered : filtered.slice(0, 3);
+  };
+
+  const getReviewCountByRating = (rating) => {
+    return reviews.filter(review => review.rating === rating).length;
+  };
+
+  const filteredReviews = getFilteredReviews();
+  const displayedReviews = getDisplayedReviews();
 
   return (
     <SafeAreaView style={styles.container}>
       <Header />
-
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
@@ -273,19 +168,6 @@ const ServiceDetails = ({ navigation, route }) => {
           <Icon name="arrow-back" size={24} color="#2C3E50" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{service.name}</Text>
-        
-        {/* Cart Badge */}
-        {cartItemCount > 0 && (
-          <TouchableOpacity 
-            style={styles.cartButton}
-            onPress={() => navigation.navigate('ViewCart')}
-          >
-            <Icon name="cart-outline" size={24} color="#2C3E50" />
-            <View style={styles.cartBadge}>
-              <Text style={styles.cartBadgeText}>{cartItemCount}</Text>
-            </View>
-          </TouchableOpacity>
-        )}
       </View>
       
       <View style={styles.mainContainer}>
@@ -294,126 +176,248 @@ const ServiceDetails = ({ navigation, route }) => {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Service Image */}
           <Image 
             source={{ uri: service.image_url || 'https://via.placeholder.com/400x300' }}
             style={styles.serviceImage}
             resizeMode="cover"
           />
-
           <View style={styles.contentContainer}>
-            {/* Service Info */}
             <View style={styles.serviceInfo}>
               <Text style={styles.serviceName}>{service.name}</Text>
               <Text style={styles.serviceDescription}>{service.description}</Text>
-              
-              <View style={styles.ratingRow}>
-                <View style={styles.starsContainer}>
-                  {renderStars(parseFloat(averageRating))}
+              {service.rating && service.rating > 0 && (
+                <View style={styles.ratingRow}>
+                  <View style={styles.starsContainer}>
+                    {renderStars(service.rating)}
+                  </View>
+                  <Text style={styles.ratingText}>
+                    {service.rating.toFixed(1)} ({service.reviewCount || 0} {service.reviewCount === 1 ? 'review' : 'reviews'})
+                  </Text>
                 </View>
-                <Text style={styles.ratingText}>
-                  {averageRating} ({reviews.length} reviews)
-                </Text>
+              )}
+              <View style={styles.durationContainer}>
+                <Icon name="time-outline" size={18} color="#FF6B9D" />
+                <Text style={styles.durationText}>{service.duration || 60} minutes</Text>
+              </View>
+              
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>Price</Text>
+                <Text style={styles.priceValue}>₹{service.price}</Text>
               </View>
             </View>
-
-            {/* Select Professional Section */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Select a professional</Text>
-              <FlatList
-                data={mockProfessionals}
-                renderItem={renderProfessionalItem}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                showsVerticalScrollIndicator={false}
-              />
+            <View style={styles.infoBox}>
+              <Icon name="information-circle-outline" size={20} color="#FF6B9D" />
+              <Text style={styles.infoText}>
+                Select your preferred time slot and professional during checkout
+              </Text>
             </View>
-
-            {/* Select Time Section */}
+            {/* REVIEWS SECTION WITH FILTER */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Select a time</Text>
-              <View style={styles.timeSlots}>
-                {timeSlots.map((time) => (
+              <Text style={styles.sectionTitle}>
+                Customer Reviews ({reviews.length})
+              </Text>
+              
+              {/* RATING FILTER */}
+              {reviews.length > 0 && (
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.filterContainer}
+                >
                   <TouchableOpacity
-                    key={time}
                     style={[
-                      styles.timeSlot,
-                      selectedTime === time && styles.selectedTimeSlot
+                      styles.filterChip,
+                      selectedRatingFilter === 'all' && styles.filterChipActive
                     ]}
-                    onPress={() => setSelectedTime(time)}
+                    onPress={() => setSelectedRatingFilter('all')}
                   >
                     <Text style={[
-                      styles.timeSlotText,
-                      selectedTime === time && styles.selectedTimeSlotText
+                      styles.filterChipText,
+                      selectedRatingFilter === 'all' && styles.filterChipTextActive
                     ]}>
-                      {time}
+                      All ({reviews.length})
                     </Text>
                   </TouchableOpacity>
-                ))}
+                  {[5, 4, 3, 2, 1].map((rating) => {
+                    const count = getReviewCountByRating(rating);
+                    if (count === 0) return null;
+                    
+                    return (
+                      <TouchableOpacity
+                        key={rating}
+                        style={[
+                          styles.filterChip,
+                          selectedRatingFilter === rating.toString() && styles.filterChipActive
+                        ]}
+                        onPress={() => setSelectedRatingFilter(rating.toString())}
+                      >
+                        <Icon name="star" size={14} color={selectedRatingFilter === rating.toString() ? "#FFF" : "#FFD700"} />
+                        <Text style={[
+                          styles.filterChipText,
+                          selectedRatingFilter === rating.toString() && styles.filterChipTextActive
+                        ]}>
+                          {rating} ({count})
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
+              {reviewsLoading ? (
+                <ActivityIndicator size="small" color="#FF6B9D" style={{ marginTop: 20 }} />
+              ) : displayedReviews.length > 0 ? (
+                <>
+                  {displayedReviews.map((review, index) => (
+                    <View key={review._id || index} style={styles.reviewCard}>
+                      <View style={styles.reviewHeader}>
+                        <View style={styles.reviewerInfo}>
+                          {review.user?.profilePicture ? (
+                            <Image
+                              source={{ uri: review.user.profilePicture }}
+                              style={styles.reviewerAvatar}
+                            />
+                          ) : (
+                            <View style={styles.reviewerAvatarPlaceholder}>
+                              <Text style={styles.avatarText}>
+                                {review.user?.name?.charAt(0).toUpperCase() || 'U'}
+                              </Text>
+                            </View>
+                          )}
+                          <View style={styles.reviewerDetails}>
+                            <Text style={styles.reviewerName}>
+                              {review.user?.name || 'Anonymous'}
+                            </Text>
+                            <View style={styles.reviewStars}>
+                              {renderStars(review.rating)}
+                            </View>
+                          </View>
+                        </View>
+                        <Text style={styles.reviewDate}>
+                          {new Date(review.createdAt).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </Text>
+                      </View>
+                      {review.comment && (
+                        <Text style={styles.reviewComment} numberOfLines={showAllReviews ? undefined : 3}>
+                          {review.comment}
+                        </Text>
+                      )}
+                      {review.isVerifiedPurchase && (
+                        <View style={styles.verifiedBadge}>
+                          <Icon name="checkmark-circle" size={14} color="#10B981" />
+                          <Text style={styles.verifiedText}>Verified Purchase</Text>
+                        </View>
+                      )}
+                      
+                      {review.media && review.media.length > 0 && (
+                        <ScrollView 
+                          horizontal 
+                          showsHorizontalScrollIndicator={false}
+                          style={styles.reviewMediaContainer}
+                        >
+                          {review.media.map((media, idx) => (
+                            <Image
+                              key={idx}
+                              source={{ uri: media.url }}
+                              style={styles.reviewMediaImage}
+                              resizeMode="cover"
+                            />
+                          ))}
+                        </ScrollView>
+                      )}
+                    </View>
+                  ))}
+
+                  {/* LOAD MORE BUTTON */}
+                  {filteredReviews.length > 3 && (
+                    <TouchableOpacity 
+                      style={styles.loadMoreButton}
+                      onPress={() => setShowAllReviews(!showAllReviews)}
+                    >
+                      <Text style={styles.loadMoreText}>
+                        {showAllReviews ? 'Show Less' : `Load More (${filteredReviews.length - 3} more)`}
+                      </Text>
+                      <Icon 
+                        name={showAllReviews ? "chevron-up" : "chevron-down"} 
+                        size={18} 
+                        color="#FF6B9D" 
+                      />
+                    </TouchableOpacity>
+                  )}
+                </>
+              ) : (
+                <View style={styles.noReviewsContainer}>
+                  <Icon name="chatbubble-outline" size={32} color="#CCC" />
+                  <Text style={styles.noReviewsText}>
+                    {selectedRatingFilter === 'all' ? 'No reviews yet' : `No ${selectedRatingFilter}-star reviews`}
+                  </Text>
+                  <Text style={styles.noReviewsSubtext}>
+                    {selectedRatingFilter === 'all' ? 'Be the first to review this service' : 'Try selecting a different rating filter'}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>What's Included</Text>
+              <View style={styles.featureItem}>
+                <Icon name="checkmark-circle" size={20} color="#10B981" />
+                <Text style={styles.featureText}>Professional service at your doorstep</Text>
+              </View>
+              <View style={styles.featureItem}>
+                <Icon name="checkmark-circle" size={20} color="#10B981" />
+                <Text style={styles.featureText}>Flexible time slot selection</Text>
+              </View>
+              <View style={styles.featureItem}>
+                <Icon name="checkmark-circle" size={20} color="#10B981" />
+                <Text style={styles.featureText}>Choose your preferred professional</Text>
+              </View>
+              <View style={styles.featureItem}>
+                <Icon name="checkmark-circle" size={20} color="#10B981" />
+                <Text style={styles.featureText}>Premium quality products</Text>
               </View>
             </View>
-
-            {/* Date Selection */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Select Date</Text>
-              <TouchableOpacity 
-                style={styles.dateButton}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Icon name="calendar-outline" size={18} color="#FF6B9D" />
-                <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {showDatePicker && (
-              <DateTimePicker
-                value={selectedDate}
-                mode="date"
-                display="default"
-                onChange={handleDateChange}
-                minimumDate={new Date()}
-              />
-            )}
           </View>
         </ScrollView>
 
-        {/* Fixed Bottom Section */}
-<View style={styles.bottomSection}>
-  <View style={styles.priceAndButtonRow}>
-    <View style={styles.priceContainer}>
-      <Text style={styles.durationPrice}>
-        ₹{selectedProfessional?.price || service.price}, 60 min
-      </Text>
-      <Text style={styles.totalLabel}>₹{totalPrice}</Text>
-    </View>
-    
-    <TouchableOpacity
-      style={[styles.addToCartButton, loading && styles.disabledButton]}
-      onPress={handleAddToCart}
-      disabled={loading}
-    >
-      {loading ? (
-        <ActivityIndicator size="small" color="#fff" />
-      ) : (
-        <View style={styles.addToCartContent}>
-          <Icon name="cart-outline" size={20} color="#fff" style={styles.cartIcon} />
-          <Text style={styles.addToCartButtonText}>Add to Cart</Text>
+        <View style={styles.bottomSection}>
+          <View style={styles.priceAndButtonRow}>
+            <View style={styles.priceContainer}>
+              <Text style={styles.durationPrice}>
+                ₹{service.price}, {service.duration || 60} min
+              </Text>
+              <Text style={styles.totalLabel}>₹{totalPrice}</Text>
+            </View>
+            
+            <TouchableOpacity
+              style={[
+                isInCart ? styles.viewCartButton : styles.addToCartButton,
+                loading && styles.disabledButton
+              ]}
+              onPress={isInCart ? handleViewCart : handleAddToCart}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Icon 
+                    name={isInCart ? "cart" : "cart-outline"} 
+                    size={18} 
+                    color="#fff" 
+                    style={styles.buttonIcon}
+                  />
+                  <Text style={styles.buttonText}>
+                    {isInCart ? 'View Cart' : 'Add to Cart'}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
-      )}
-    </TouchableOpacity>
-  </View>
-  
-  {cartItemCount > 0 && (
-    <TouchableOpacity
-      style={styles.viewCartButton}
-      onPress={() => navigation.navigate('ViewCart')}
-    >
-      <Text style={styles.viewCartButtonText}>
-        View Cart ({cartItemCount})
-      </Text>
-    </TouchableOpacity>
-  )}
-</View>
       </View>
     </SafeAreaView>
   );
@@ -448,26 +452,6 @@ const styles = StyleSheet.create({
     color: '#2C3E50',
     flex: 1,
   },
-  cartButton: {
-    position: 'relative',
-    padding: 5,
-  },
-  cartBadge: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    backgroundColor: '#FF6B9D',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cartBadgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
   mainContainer: {
     flex: 1,
   },
@@ -475,7 +459,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 200,
+    paddingBottom: 150,
   },
   serviceImage: {
     width: '100%',
@@ -485,7 +469,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   serviceInfo: {
-    marginBottom: 30,
+    marginBottom: 20,
   },
   serviceName: {
     fontSize: 24,
@@ -499,20 +483,53 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 12,
   },
-  ratingRow: {
+  durationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 12,
   },
-  starsContainer: {
-    flexDirection: 'row',
-    marginRight: 8,
-  },
-  ratingText: {
+  durationText: {
     fontSize: 14,
+    color: '#2C3E50',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  priceLabel: {
+    fontSize: 16,
     color: '#7F8C8D',
   },
+  priceValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2C3E50',
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF5F8',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#FFE5EF',
+  },
+  infoText: {
+    fontSize: 13,
+    color: '#666',
+    marginLeft: 10,
+    flex: 1,
+    lineHeight: 18,
+  },
   section: {
-    marginBottom: 30,
+    marginBottom: 20,
   },
   sectionTitle: {
     fontSize: 18,
@@ -520,118 +537,16 @@ const styles = StyleSheet.create({
     color: '#2C3E50',
     marginBottom: 15,
   },
-  // Professional Selection Styles
-  professionalCard: {
+  featureItem: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 12,
+    alignItems: 'center',
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  selectedProfessionalCard: {
-    borderColor: '#FF6B9D',
-    backgroundColor: '#FFF5F8',
-  },
-  professionalImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    marginRight: 12,
-  },
-  professionalInfo: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  professionalName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2C3E50',
-    marginBottom: 2,
-  },
-  professionalSpecialty: {
-    fontSize: 12,
-    color: '#7F8C8D',
-    marginBottom: 2,
-  },
-  professionalExperience: {
-    fontSize: 12,
-    color: '#7F8C8D',
-    marginBottom: 4,
-  },
-  professionalRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  selectContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  selectButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#FF6B9D',
-  },
-  selectText: {
-    fontSize: 12,
-    color: '#FF6B9D',
-    fontWeight: '500',
-  },
-  timeSlots: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  timeSlot: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    backgroundColor: '#F8F9FA',
-    minWidth: 90,
-    alignItems: 'center',
-  },
-  selectedTimeSlot: {
-    backgroundColor: '#FF6B9D',
-    borderColor: '#FF6B9D',
-  },
-  timeSlotText: {
+  featureText: {
     fontSize: 14,
-    color: '#7F8C8D',
-    fontWeight: '500',
-  },
-  selectedTimeSlotText: {
-    color: '#fff',
-  },
-  // Date Selection Styles
-  dateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    padding: 15,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-  },
-  dateText: {
-    fontSize: 16,
     color: '#2C3E50',
-    marginLeft: 12,
-    fontWeight: '500',
+    marginLeft: 10,
   },
-  // Bottom Section Styles
   bottomSection: {
     position: 'absolute',
     bottom: 0,
@@ -643,10 +558,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: -4,
-    },
+    shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 10,
@@ -655,98 +567,214 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
   },
   priceContainer: {
     flex: 1,
     marginRight: 15,
   },
-  
   durationPrice: {
     fontSize: 14,
     color: '#7F8C8D',
     marginBottom: 2,
   },
-  
   totalLabel: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#2C3E50',
   },
-  priceSection: {
-    marginBottom: 15,
-  },
-  priceRow: {
-    marginBottom: 5,
-  },
-  durationPrice: {
-    fontSize: 14,
-    color: '#7F8C8D',
-  },
-  totalRow: {
-    marginBottom: 0,
-  },
-  totalLabel: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2C3E50',
-  },
-  buttonContainer: {
-    gap: 10,
-  },
-   addToCartButton: {
+  addToCartButton: {
     backgroundColor: '#FF6B9D',
     paddingVertical: 15,
-    paddingHorizontal: 30,
+    paddingHorizontal: 24,
     borderRadius: 12,
     alignItems: 'center',
+    flexDirection: 'row',
     minWidth: 140,
+    justifyContent: 'center',
     shadowColor: '#FF6B9D',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
   },
-  
-  addToCartContent: {
-    flexDirection: 'row',
+  viewCartButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 15,
+    paddingHorizontal: 24,
+    borderRadius: 12,
     alignItems: 'center',
+    flexDirection: 'row',
+    minWidth: 140,
     justifyContent: 'center',
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  cartIcon: {
-    marginRight: 8,
+  buttonIcon: {
+    marginRight: 6,
   },
- cartIcon: {
-    marginRight: 8,
-  },
-  
-  addToCartButtonText: {
+  buttonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },
-  
-  viewCartButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: '#FF6B9D',
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 5,
-  },
-  
-  viewCartButtonText: {
-    color: '#FF6B9D',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  
   disabledButton: {
     opacity: 0.6,
+  },
+  reviewCard: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  reviewerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  reviewerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E0E0E0',
+  },
+  reviewerAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FF6B9D',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  reviewerDetails: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  reviewerName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2C3E50',
+    marginBottom: 4,
+  },
+  reviewStars: {
+    flexDirection: 'row',
+  },
+  reviewDate: {
+    fontSize: 12,
+    color: '#7F8C8D',
+  },
+  reviewComment: {
+    fontSize: 14,
+    color: '#2C3E50',
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  verifiedText: {
+    fontSize: 12,
+    color: '#10B981',
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  reviewMediaContainer: {
+    marginTop: 12,
+  },
+  reviewMediaImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginRight: 8,
+    backgroundColor: '#E0E0E0',
+  },
+  noReviewsContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  noReviewsText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: 12,
+  },
+  noReviewsSubtext: {
+    fontSize: 13,
+    color: '#999',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    marginRight: 8,
+  },
+  ratingText: {
+    fontSize: 14,
+    color: '#7F8C8D',
+    fontWeight: '500',
+  },
+  // NEW STYLES FOR FILTER AND LOAD MORE
+  filterContainer: {
+    marginBottom: 16,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    marginRight: 8,
+    gap: 4,
+  },
+  filterChipActive: {
+    backgroundColor: '#FF6B9D',
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666',
+  },
+  filterChipTextActive: {
+    color: '#FFF',
+  },
+  loadMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    backgroundColor: '#FFF5F8',
+    borderRadius: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#FFE5EF',
+  },
+  loadMoreText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FF6B9D',
+    marginRight: 6,
   },
 });
 

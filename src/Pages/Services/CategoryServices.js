@@ -180,37 +180,17 @@ const CategoryServices = ({ navigation, route }) => {
   return (
     <SafeAreaView style={styles.container}>
       <Header />
-      
-      {/* Category Header */}
-      <View style={styles.categoryHeader}>
-        <TouchableOpacity 
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+
+ <TouchableOpacity 
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
           <Icon name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
-        
-        <View style={styles.categoryInfo}>
-          <View style={styles.categoryIconContainer}>
-            <Icon 
-              name={getCategoryIcon(category)} 
-              size={32} 
-              color="#FF6B35" 
-            />
-          </View>
-          <View>
-            <Text style={styles.categoryTitle}>
-              {category.charAt(0).toUpperCase() + category.slice(1)} Services
-            </Text>
-            <Text style={styles.serviceCount}>
-              {displayServices.length} service{displayServices.length !== 1 ? 's' : ''} available
-            </Text>
-          </View>
-        </View>
-      </View>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
           <Icon name="search-outline" size={20} color="#999" />
           <TextInput
@@ -221,12 +201,6 @@ const CategoryServices = ({ navigation, route }) => {
             placeholderTextColor="#999"
           />
         </View>
-        
-        {/* Sort Dropdown */}
-        <TouchableOpacity style={styles.sortButton}>
-          <Icon name="swap-vertical-outline" size={20} color="#FF6B35" />
-          <Text style={styles.sortButtonText}>Sort</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Sort Options */}

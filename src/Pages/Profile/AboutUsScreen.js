@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -7,225 +7,143 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  ActivityIndicator,
-  Linking,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { API_URL } from '../../API/config';
+import Header from '../../Components/Header';
 
 const AboutUsScreen = ({ navigation }) => {
-  const [aboutData, setAboutData] = useState({});
-  const [teamMembers, setTeamMembers] = useState([]);
-  const [socialLinks, setSocialLinks] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchAboutData();
-  }, []);
-
-  const fetchAboutData = async () => {
-    try {
-      setLoading(true);
-      
-      const [aboutResponse, teamResponse, socialResponse] = await Promise.all([
-        fetch(`${API_URL}/about/company`),
-        fetch(`${API_URL}/about/team`),
-        fetch(`${API_URL}/about/social`)
-      ]);
-      
-      const aboutResult = await aboutResponse.json();
-      const teamResult = await teamResponse.json();
-      const socialResult = await socialResponse.json();
-      
-      setAboutData(aboutResult.data || {});
-      setTeamMembers(teamResult.data || []);
-      setSocialLinks(socialResult.data || []);
-      
-    } catch (error) {
-      console.error('Error fetching about data:', error);
-      // Fallback data if API fails
-      setAboutData({
-        company_name: "Beauty Hub",
-        description: "We are dedicated to providing premium beauty services and products to help you look and feel your best. Our team of experienced professionals uses the latest techniques and high-quality products to ensure exceptional results.",
-        mission: "To empower everyone to feel confident and beautiful by providing accessible, high-quality beauty services and products.",
-        vision: "To become the leading beauty service provider, known for innovation, excellence, and customer satisfaction.",
-        founded_year: "2020",
-        locations: "5+ Cities",
-        customers_served: "10,000+",
-        image_url: "https://via.placeholder.com/400x200/FF6B9D/FFFFFF?text=Beauty+Hub"
-      });
-      
-      setTeamMembers([
-        {
-          id: 1,
-          name: "Sarah Johnson",
-          position: "Founder & CEO",
-          experience: "10+ years",
-          image_url: "https://via.placeholder.com/120x120/FF6B9D/FFFFFF?text=SJ",
-          bio: "Expert in beauty industry with passion for helping clients achieve their beauty goals."
-        },
-        {
-          id: 2,
-          name: "Emily Davis",
-          position: "Head Stylist",
-          experience: "8+ years",
-          image_url: "https://via.placeholder.com/120x120/54A0FF/FFFFFF?text=ED",
-          bio: "Specialized in hair styling and makeup with extensive training in latest trends."
-        }
-      ]);
-      
-      setSocialLinks([
-        { platform: "Instagram", url: "https://instagram.com/beautyhub", icon: "logo-instagram" },
-        { platform: "Facebook", url: "https://facebook.com/beautyhub", icon: "logo-facebook" },
-        { platform: "Twitter", url: "https://twitter.com/beautyhub", icon: "logo-twitter" }
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const openSocialLink = async (url) => {
-    try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-      }
-    } catch (error) {
-      console.error('Error opening link:', error);
-    }
-  };
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Icon name="arrow-back" size={24} color="#FF6B9D" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>About Us</Text>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF6B9D" />
-          <Text style={styles.loadingText}>Loading...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Icon name="arrow-back" size={24} color="#FF6B9D" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>About Us</Text>
-      </View>
-
+      <Header/>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         
         {/* Company Hero Section */}
-        {aboutData.image_url && (
-          <View style={styles.heroSection}>
-            <Image 
-              source={{ uri: aboutData.image_url }} 
-              style={styles.heroImage}
-              resizeMode="cover"
-            />
-            <View style={styles.heroOverlay}>
-              <Text style={styles.heroTitle}>{aboutData.company_name}</Text>
-              <Text style={styles.heroSubtitle}>Beauty & Wellness Services</Text>
+        <View style={styles.heroSection}>
+          <View style={styles.heroContent}>            
+            <Text style={styles.heroTitle}>Husn</Text>
+            <Text style={styles.heroSubtitle}>Luxury Unisex Salon & Spa</Text>
+            <View style={styles.locationBadge}>
+              <Icon name="location" size={16} color="#FF6B9D" />
+              <Text style={styles.locationText}>Sector 18, Chandigarh</Text>
             </View>
           </View>
-        )}
+        </View>
 
-        {/* Company Description */}
+        {/* About Description */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Who We Are</Text>
+          <Text style={styles.sectionTitle}>About Us</Text>
           <View style={styles.descriptionCard}>
-            <Text style={styles.descriptionText}>{aboutData.description}</Text>
+            <Text style={styles.descriptionText}>
+              At <Text style={styles.brandName}>Husn – Luxury Unisex Salon & Spa</Text>, we believe beauty is an experience, not just a service. Located in the heart of Sector 18, Chandigarh, Husn is your premium destination for hair, beauty, and wellness.
+            </Text>
+            <Text style={styles.descriptionText}>
+              Our team of expert professionals brings together creativity, skill, and world-class techniques to deliver services that are as unique as you are. From precision haircuts, styling, and bridal makeovers to rejuvenating facials, luxury spa therapies, and personalized skincare solutions, we ensure every visit leaves you feeling refreshed, confident, and radiant.
+            </Text>
+            <Text style={styles.descriptionText}>
+              At Husn, elegance meets comfort. With a luxurious ambiance, top-quality products, and personalized attention, we create a space where beauty and relaxation go hand in hand. Whether you're preparing for a special occasion or simply indulging in self-care, <Text style={styles.brandName}>Husn – Luxury Unisex Salon & Spa</Text> is your one-stop destination for transforming everyday moments into extraordinary experiences.
+            </Text>
           </View>
         </View>
 
-        {/* Mission & Vision */}
+        {/* Services Highlights */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Our Mission & Vision</Text>
-          <View style={styles.missionVisionCard}>
-            <View style={styles.missionSection}>
-              <Icon name="rocket" size={24} color="#FF6B9D" />
-              <Text style={styles.missionTitle}>Mission</Text>
-              <Text style={styles.missionText}>{aboutData.mission}</Text>
+          <Text style={styles.sectionTitle}>Our Services</Text>
+          <View style={styles.servicesGrid}>
+            <View style={styles.serviceCard}>
+              <Icon name="cut" size={32} color="#FF6B9D" />
+              <Text style={styles.serviceTitle}>Hair Styling</Text>
+              <Text style={styles.serviceDesc}>Precision cuts & styling</Text>
             </View>
-            <View style={styles.divider} />
-            <View style={styles.visionSection}>
-              <Icon name="eye" size={24} color="#54A0FF" />
-              <Text style={styles.visionTitle}>Vision</Text>
-              <Text style={styles.visionText}>{aboutData.vision}</Text>
+            <View style={styles.serviceCard}>
+              <Icon name="flower" size={32} color="#54A0FF" />
+              <Text style={styles.serviceTitle}>Bridal Makeovers</Text>
+              <Text style={styles.serviceDesc}>Your special day perfect</Text>
+            </View>
+            <View style={styles.serviceCard}>
+              <Icon name="sparkles" size={32} color="#9B59B6" />
+              <Text style={styles.serviceTitle}>Facial Treatments</Text>
+              <Text style={styles.serviceDesc}>Rejuvenating facials</Text>
+            </View>
+            <View style={styles.serviceCard}>
+              <Icon name="leaf" size={32} color="#26DE81" />
+              <Text style={styles.serviceTitle}>Luxury Spa</Text>
+              <Text style={styles.serviceDesc}>Therapeutic wellness</Text>
+            </View>
+            <View style={styles.serviceCard}>
+              <Icon name="heart" size={32} color="#FC5C65" />
+              <Text style={styles.serviceTitle}>Skincare</Text>
+              <Text style={styles.serviceDesc}>Personalized solutions</Text>
+            </View>
+            <View style={styles.serviceCard}>
+              <Icon name="star" size={32} color="#FD9644" />
+              <Text style={styles.serviceTitle}>Premium Care</Text>
+              <Text style={styles.serviceDesc}>World-class products</Text>
             </View>
           </View>
         </View>
 
-        {/* Company Stats */}
+        {/* Why Choose Us */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Our Achievements</Text>
-          <View style={styles.statsContainer}>
-            <View style={styles.statCard}>
-              <Icon name="calendar" size={30} color="#FF6B9D" />
-              <Text style={styles.statNumber}>{aboutData.founded_year}</Text>
-              <Text style={styles.statLabel}>Founded</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Icon name="location" size={30} color="#54A0FF" />
-              <Text style={styles.statNumber}>{aboutData.locations}</Text>
-              <Text style={styles.statLabel}>Locations</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Icon name="people" size={30} color="#9B59B6" />
-              <Text style={styles.statNumber}>{aboutData.customers_served}</Text>
-              <Text style={styles.statLabel}>Happy Customers</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Team Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Meet Our Team</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {teamMembers.map((member) => (
-              <View key={member.id} style={styles.teamMemberCard}>
-                <Image 
-                  source={{ uri: member.image_url }} 
-                  style={styles.memberImage}
-                  resizeMode="cover"
-                />
-                <Text style={styles.memberName}>{member.name}</Text>
-                <Text style={styles.memberPosition}>{member.position}</Text>
-                <Text style={styles.memberExperience}>{member.experience}</Text>
-                <Text style={styles.memberBio}>{member.bio}</Text>
+          <Text style={styles.sectionTitle}>Why Choose Husn?</Text>
+          <View style={styles.featuresContainer}>
+            <View style={styles.featureItem}>
+              <View style={styles.featureIcon}>
+                <Icon name="people" size={24} color="#FF6B9D" />
               </View>
-            ))}
-          </ScrollView>
+              <View style={styles.featureContent}>
+                <Text style={styles.featureTitle}>Expert Professionals</Text>
+                <Text style={styles.featureDesc}>Highly skilled team with years of experience</Text>
+              </View>
+            </View>
+            <View style={styles.featureItem}>
+              <View style={styles.featureIcon}>
+                <Icon name="diamond" size={24} color="#54A0FF" />
+              </View>
+              <View style={styles.featureContent}>
+                <Text style={styles.featureTitle}>Luxurious Ambiance</Text>
+                <Text style={styles.featureDesc}>Elegant and comfortable environment</Text>
+              </View>
+            </View>
+            <View style={styles.featureItem}>
+              <View style={styles.featureIcon}>
+                <Icon name="shield-checkmark" size={24} color="#26DE81" />
+              </View>
+              <View style={styles.featureContent}>
+                <Text style={styles.featureTitle}>Premium Products</Text>
+                <Text style={styles.featureDesc}>Top-quality products for best results</Text>
+              </View>
+            </View>
+            <View style={styles.featureItem}>
+              <View style={styles.featureIcon}>
+                <Icon name="person" size={24} color="#9B59B6" />
+              </View>
+              <View style={styles.featureContent}>
+                <Text style={styles.featureTitle}>Personalized Care</Text>
+                <Text style={styles.featureDesc}>Customized services for your unique needs</Text>
+              </View>
+            </View>
+          </View>
         </View>
 
-        {/* Social Media Links */}
+        {/* Contact Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Follow Us</Text>
-          <View style={styles.socialContainer}>
-            {socialLinks.map((social, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.socialButton}
-                onPress={() => openSocialLink(social.url)}
-              >
-                <Icon name={social.icon} size={24} color="#fff" />
-                <Text style={styles.socialText}>{social.platform}</Text>
-              </TouchableOpacity>
-            ))}
+          <Text style={styles.sectionTitle}>Visit Us</Text>
+          <View style={styles.contactCard}>
+            <View style={styles.contactItem}>
+              <Icon name="location" size={24} color="#FF6B9D" />
+              <View style={styles.contactText}>
+                <Text style={styles.contactLabel}>Address</Text>
+                <Text style={styles.contactValue}>Sector 18, Chandigarh</Text>
+              </View>
+            </View>
+            <View style={styles.contactDivider} />
+            <View style={styles.contactItem}>
+              <Icon name="time" size={24} color="#54A0FF" />
+              <View style={styles.contactText}>
+                <Text style={styles.contactLabel}>Hours</Text>
+                <Text style={styles.contactValue}>10:00 AM - 8:00 PM (Daily)</Text>
+              </View>
+            </View>
           </View>
         </View>
 
@@ -261,43 +179,45 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#7F8C8D',
-  },
   heroSection: {
-    height: 200,
-    position: 'relative',
+    backgroundColor: '#fff',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
-  heroImage: {
-    width: '100%',
-    height: '100%',
-  },
-  heroOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 20,
+  heroContent: {
     alignItems: 'center',
   },
   heroTitle: {
-    fontSize: 28,
+    fontSize: 36,
     fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 5,
+    color: '#FF6B9D',
+    marginBottom: 8,
+    letterSpacing: 2,
   },
   heroSubtitle: {
     fontSize: 16,
-    color: '#fff',
-    opacity: 0.9,
+    color: '#34495E',
+    marginBottom: 15,
+    fontWeight: '500',
+  },
+  locationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF5F8',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#FF6B9D',
+  },
+  locationText: {
+    marginLeft: 6,
+    color: '#FF6B9D',
+    fontWeight: '600',
+    fontSize: 14,
   },
   section: {
     padding: 20,
@@ -319,149 +239,120 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   descriptionText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#34495E',
     lineHeight: 24,
     textAlign: 'justify',
-  },
-  missionVisionCard: {
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 20,
-    shadowColor: '#FF6B9D',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  missionSection: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  missionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FF6B9D',
-    marginTop: 10,
-    marginBottom: 10,
-  },
-  missionText: {
-    fontSize: 14,
-    color: '#34495E',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#E0E0E0',
-    marginVertical: 10,
-  },
-  visionSection: {
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  visionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#54A0FF',
-    marginTop: 10,
-    marginBottom: 10,
-  },
-  visionText: {
-    fontSize: 14,
-    color: '#34495E',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  statCard: {
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 20,
-    alignItems: 'center',
-    flex: 1,
-    marginHorizontal: 5,
-    shadowColor: '#FF6B9D',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  statNumber: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2C3E50',
-    marginTop: 10,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#7F8C8D',
-    marginTop: 5,
-  },
-  teamMemberCard: {
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 20,
-    marginRight: 15,
-    width: 200,
-    alignItems: 'center',
-    shadowColor: '#FF6B9D',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  memberImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
     marginBottom: 15,
   },
-  memberName: {
-    fontSize: 16,
+  brandName: {
     fontWeight: 'bold',
-    color: '#2C3E50',
-    marginBottom: 5,
-  },
-  memberPosition: {
-    fontSize: 14,
     color: '#FF6B9D',
-    marginBottom: 5,
   },
-  memberExperience: {
-    fontSize: 12,
-    color: '#7F8C8D',
-    marginBottom: 10,
-  },
-  memberBio: {
-    fontSize: 12,
-    color: '#34495E',
-    textAlign: 'center',
-    lineHeight: 16,
-  },
-  socialContainer: {
+  servicesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
-  socialButton: {
-    backgroundColor: '#FF6B9D',
+  serviceCard: {
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    padding: 20,
+    width: '48%',
+    alignItems: 'center',
+    marginBottom: 15,
+    shadowColor: '#FF6B9D',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  serviceTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#2C3E50',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  serviceDesc: {
+    fontSize: 12,
+    color: '#7F8C8D',
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  featuresContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    padding: 15,
+    shadowColor: '#FF6B9D',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
-    marginBottom: 10,
-    minWidth: 120,
-    justifyContent: 'center',
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
-  socialText: {
-    color: '#fff',
-    marginLeft: 8,
+  featureIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FFF5F8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  featureContent: {
+    flex: 1,
+  },
+  featureTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2C3E50',
+    marginBottom: 4,
+  },
+  featureDesc: {
+    fontSize: 13,
+    color: '#7F8C8D',
+    lineHeight: 18,
+  },
+  contactCard: {
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    padding: 20,
+    shadowColor: '#FF6B9D',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  contactText: {
+    marginLeft: 15,
+    flex: 1,
+  },
+  contactLabel: {
+    fontSize: 12,
+    color: '#7F8C8D',
+    marginBottom: 4,
+  },
+  contactValue: {
+    fontSize: 15,
+    color: '#2C3E50',
     fontWeight: '600',
+  },
+  contactDivider: {
+    height: 1,
+    backgroundColor: '#F0F0F0',
+    marginVertical: 10,
   },
   bottomSpacer: {
     height: 50,

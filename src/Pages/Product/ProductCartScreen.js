@@ -55,7 +55,7 @@ const ProductCartScreen = ({ navigation }) => {
 
   useEffect(() => {
     fetchCartItems();
-  }, []);
+  }, [fetchCartItems]);
 
   const updateQuantity = async (itemId, newQuantity) => {
     if (newQuantity < 1) return;
@@ -112,10 +112,8 @@ const ProductCartScreen = ({ navigation }) => {
                 method: 'DELETE',
                 headers: getAuthHeaders()
               });
-
               if (response.ok) {
                 setCartItems(prev => prev.filter(item => item._id !== itemId));
-                // Recalculate total
                 const updatedTotal = cartItems
                   .filter(item => item._id !== itemId)
                   .reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -172,7 +170,7 @@ const ProductCartScreen = ({ navigation }) => {
       Alert.alert('Error', 'Your cart is empty');
       return;
     }
-    navigation.navigate('ProductCheckout', { 
+    navigation.navigate('ViewCart', { 
       cartItems, 
       totalAmount 
     });
@@ -260,7 +258,6 @@ const ProductCartScreen = ({ navigation }) => {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-
         <View style={styles.header}>
           <TouchableOpacity 
             style={styles.backButton}
@@ -282,7 +279,8 @@ const ProductCartScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <Header />
-      {/* Header */}
+      
+      {/* Custom Header */}
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
@@ -300,15 +298,19 @@ const ProductCartScreen = ({ navigation }) => {
         </View>
       </View>
 
-      {cartItems.length === 0 ? renderEmptyCart() : (
-        <View style={styles.content}>
-          <FlatList
-            data={cartItems}
-            renderItem={renderCartItem}
-            keyExtractor={(item) => item._id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.listContainer}
-          />
+{cartItems.length === 0 ? (
+        renderEmptyCart()
+      ) : (
+        <>
+          <View style={styles.content}>
+            <FlatList
+              data={cartItems}
+              renderItem={renderCartItem}
+              keyExtractor={(item) => item._id}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listContainer}
+            />
+          </View>
           
           {/* Cart Summary */}
           <View style={styles.cartSummary}>
@@ -337,7 +339,7 @@ const ProductCartScreen = ({ navigation }) => {
               <Icon name="arrow-forward" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
-        </View>
+        </>
       )}
     </SafeAreaView>
   );

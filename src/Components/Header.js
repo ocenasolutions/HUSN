@@ -10,7 +10,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useCart } from '../contexts/CartContext';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { API_URL } from '../API/config';
 
 const { width } = Dimensions.get('window');
 
@@ -19,23 +21,78 @@ const Header = ({
   showBack, 
   onBackPress, 
   showCart = true,
-  cartItemCount = 0,
   showWishlist = true,
-  wishlistItemCount = 0,
   currentPage = '',
-  showPageIndicator = true
+  showPageIndicator = true,
+  showAddress = true,
 }) => {
-  const { user } = useAuth();
+  const { user, tokens } = useAuth();
+  const { totalCartCount, wishlistCount, refreshCounts } = useCart();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute();
+  const [defaultAddress, setDefaultAddress] = useState(null);
+  const [addressLoading, setAddressLoading] = useState(true);
 
-  // Auto-detect page name from route or use provided props
+  const getAuthHeaders = () => {
+    const token = tokens?.accessToken || user?.token;
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': token ? `Bearer ${token}` : ''
+    };
+  };
+
+  const fetchDefaultAddress = async () => {
+    try {
+      setAddressLoading(true);
+      const response = await fetch(`${API_URL}/addresses`, {
+        headers: getAuthHeaders()
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.data) {
+        const defaultAddr = data.data.find(addr => addr.isDefault);
+        const selectedAddress = defaultAddr || data.data[0];
+        setDefaultAddress(selectedAddress);
+      }
+    } catch (error) {
+      console.error('Error fetching addresses:', error);
+    } finally {
+      setAddressLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user && !showBack) {
+        fetchDefaultAddress();
+      }
+      // Refresh cart and wishlist counts when screen is focused
+      if (user) {
+        refreshCounts();
+      }
+    }, [user, showBack])
+  );
+
+  const getShortAddress = () => {
+    if (addressLoading) return 'Loading...';
+    if (!defaultAddress) return 'Select delivery address';
+    
+    if (defaultAddress.city && defaultAddress.state) {
+      return `${defaultAddress.city}, ${defaultAddress.state}`;
+    } else if (defaultAddress.city) {
+      return defaultAddress.city;
+    } else if (defaultAddress.pincode) {
+      return `Pincode ${defaultAddress.pincode}`;
+    }
+    return 'Address available';
+  };
+
   const getPageTitle = () => {
     if (currentPage) return currentPage;
     if (title) return title;
     
-    // Convert route name to readable format
     const routeName = route.name;
     if (routeName === 'Home') return 'Home';
     if (routeName === 'ViewCart') return 'My Cart';
@@ -56,7 +113,6 @@ const Header = ({
     if (routeName === 'Help') return 'Help & Support';
     if (routeName === 'About') return 'About Us';
     
-    // Default: convert camelCase to readable format
     return routeName.replace(/([A-Z])/g, ' $1').trim();
   };
 
@@ -68,6 +124,10 @@ const Header = ({
     navigation.navigate('Wishlist');
   };
 
+  const handleAddressPress = () => {
+    navigation.navigate('SavedAddresses');
+  };
+
   const isSmallScreen = width < 350;
 
   return (
@@ -75,7 +135,7 @@ const Header = ({
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <View style={styles.headerContent}>
-          {/* Left Section - Back Button or HUSN Logo */}
+          {/* Left Section - Back Button or HUSN Logo with Address */}
           <View style={styles.leftSection}>
             {showBack ? (
               <TouchableOpacity 
@@ -88,20 +148,34 @@ const Header = ({
               <TouchableOpacity 
                 style={styles.logoSection}
                 onPress={() => navigation.navigate('Home')}
+                activeOpacity={0.7}
               >
                 <Text style={styles.husn}>HUSN</Text>
+                {showAddress && user && (
+                  <TouchableOpacity 
+                    style={styles.addressContainer}
+                    onPress={handleAddressPress}
+                    activeOpacity={0.7}
+                  >
+                    <Icon name="location" size={14} color="#666" />
+                    <Text style={styles.addressText} numberOfLines={1}>
+                      {getShortAddress()}
+                    </Text>
+                    <Icon name="chevron-down" size={14} color="#666" />
+                  </TouchableOpacity>
+                )}
               </TouchableOpacity>
             )}
           </View>
 
           {/* Center Section - Page Title */}
-          <View style={styles.centerSection}>
-            {showPageIndicator && (
-              <Text style={styles.pageTitle}>
+          {showPageIndicator && (
+            <View style={styles.centerSection}>
+              <Text style={styles.pageTitle} numberOfLines={1}>
                 {getPageTitle()}
               </Text>
-            )}
-          </View>
+            </View>
+          )}
 
           {/* Right Section - Action Buttons */}
           <View style={styles.rightSection}>
@@ -116,10 +190,10 @@ const Header = ({
                   size={isSmallScreen ? 20 : 22} 
                   color="#333" 
                 />
-                {wishlistItemCount > 0 && (
+                {wishlistCount > 0 && (
                   <View style={[styles.badge, styles.wishlistBadge]}>
                     <Text style={styles.badgeText}>
-                      {wishlistItemCount > 99 ? '99+' : wishlistItemCount}
+                      {wishlistCount > 99 ? '99+' : wishlistCount}
                     </Text>
                   </View>
                 )}
@@ -137,10 +211,10 @@ const Header = ({
                   size={isSmallScreen ? 20 : 22} 
                   color="#333" 
                 />
-                {cartItemCount > 0 && (
+                {totalCartCount > 0 && (
                   <View style={[styles.badge, styles.cartBadge]}>
                     <Text style={styles.badgeText}>
-                      {cartItemCount > 99 ? '99+' : cartItemCount}
+                      {totalCartCount > 99 ? '99+' : totalCartCount}
                     </Text>
                   </View>
                 )}
@@ -175,9 +249,9 @@ const styles = StyleSheet.create({
     height: 56,
   },
   leftSection: {
-    width: 80,
     justifyContent: 'flex-start',
     alignItems: 'flex-start',
+    minWidth: 100,
   },
   backButton: {
     width: 40,
@@ -187,7 +261,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   logoSection: {
-    paddingVertical: 8,
+    paddingVertical: 4,
     paddingHorizontal: 4,
   },
   husn: {
@@ -196,23 +270,41 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 0.5,
   },
-  centerSection: {
-    flex: 1,
-    justifyContent: 'center',
+  addressContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    marginTop: 2,
+    paddingVertical: 2,
+    paddingRight: 4,
+  },
+  addressText: {
+    fontSize: 11,
+    color: '#666',
+    marginLeft: 3,
+    marginRight: 2,
+    maxWidth: 90,
+    fontWeight: '500',
+  },
+  centerSection: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: -1,
   },
   pageTitle: {
     color: '#333',
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
+    maxWidth: width - 240,
   },
   rightSection: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    width: 80,
+    minWidth: 100,
   },
   actionButton: {
     width: 40,
@@ -225,8 +317,8 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: 'absolute',
-    top: 6,
-    right: 6,
+    top: 4,
+    right: 4,
     borderRadius: 10,
     minWidth: 18,
     height: 18,

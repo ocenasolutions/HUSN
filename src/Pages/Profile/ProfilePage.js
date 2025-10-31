@@ -16,6 +16,7 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../../contexts/AuthContext';
 import Header from '../../Components/Header';
+import { Linking } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -55,15 +56,30 @@ const ProfilePage = ({ navigation }) => {
       .substring(0, 2);
   };
 
+
   const handleSaveProfile = async () => {
     try {
-      // In a real app, you would make an API call here
       await updateUser({ name: editedName, email: editedEmail });
       setIsEditModalVisible(false);
       Alert.alert('Success', 'Profile updated successfully!');
     } catch (error) {
       Alert.alert('Error', 'Failed to update profile');
     }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This will take you to a secure page to delete your account. Are you sure you want to continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Continue', 
+          style: 'destructive', 
+          onPress: () => navigation.navigate('DeleteAccount')
+        }
+      ]
+    );
   };
 
   const handleLogout = () => {
@@ -77,10 +93,10 @@ const ProfilePage = ({ navigation }) => {
     );
   };
 
-  const ProfileOption = ({ icon, title, subtitle, onPress, showBadge, badgeCount, color = '#FF6B9D' }) => (
+  const ProfileOption = ({ icon, title, subtitle, onPress, showBadge, badgeCount, color = '#FF6B9D', dangerous = false }) => (
     <TouchableOpacity style={styles.profileOption} onPress={onPress}>
       <View style={[styles.optionIconContainer, { backgroundColor: color + '20' }]}>
-        <Icon name={icon} size={20} color={color} />
+        <Icon name={icon} size={20} color={dangerous ? '#FF4444' : color} />
         {showBadge && badgeCount > 0 && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{badgeCount}</Text>
@@ -88,7 +104,7 @@ const ProfilePage = ({ navigation }) => {
         )}
       </View>
       <View style={styles.optionContent}>
-        <Text style={styles.optionTitle}>{title}</Text>
+        <Text style={[styles.optionTitle, dangerous && { color: '#FF4444' }]}>{title}</Text>
         {subtitle && <Text style={styles.optionSubtitle}>{subtitle}</Text>}
       </View>
       <Icon name="chevron-forward" size={16} color="#C0C0C0" />
@@ -159,21 +175,20 @@ const ProfilePage = ({ navigation }) => {
               transform: [{ translateY: slideAnim }],
             },
           ]}>
-<View style={styles.profileImageContainer}>
-  {user?.avatar || true ? ( 
+  <View style={styles.profileImageContainer}>
+  {user?.avatar ? (
     <Image
-      source={{
-        uri:
-          user?.avatar ||
-          "https://i.pinimg.com/736x/5d/39/8c/5d398c0400bd3ea6d05463e28889684c.jpg",
-      }}
+      source={{ uri: user.avatar }}
       style={styles.profileImage}
     />
   ) : (
     <View style={styles.profilePlaceholder}>
-      <Text style={styles.profileInitials}>{getInitials(user?.name)}</Text>
+      <Text style={styles.profileInitials}>
+        {user?.name ? user.name.split(" ")[0] : "User"}
+      </Text>
     </View>
   )}
+
   <TouchableOpacity style={styles.editImageButton}>
     <Icon name="camera" size={14} color="#fff" />
   </TouchableOpacity>
@@ -182,7 +197,6 @@ const ProfilePage = ({ navigation }) => {
           
           <Text style={styles.profileName}>{user?.name || 'Beautiful User'}</Text>
         </Animated.View>
-
         {/* Account Section */}
         <Animated.View 
           style={[
@@ -193,57 +207,19 @@ const ProfilePage = ({ navigation }) => {
             },
           ]}
         >
-          <Text style={styles.sectionTitle}>Account</Text>
-          
-          <ProfileOption
-            icon="calendar-outline"
-            title="Booking History"
-            onPress={() => navigation.navigate('MyBookings')}
-            color="#FF6B9D"
-          />
-          
+      <Text style={styles.sectionTitle}>Services/Products Info</Text>
           <ProfileOption
             icon="bag-outline"
-            title="Purchased Products"
+            title="My Orders"
             onPress={() => navigation.navigate('MyOrders')}
             color="#FF6B9D"
-          />
-          
-          <ProfileOption
-            icon="settings-outline"
-            title="Settings"
-            onPress={() => navigation.navigate('Settings')}
-            color="#FF6B9D"
-          />
+          />          
 
-          {/* Wallet Section */}
-          <Text style={styles.sectionTitle}>Wallet</Text>
           
-          <ProfileOption
-            icon="wallet-outline"
-            title="Wallet"
-            onPress={() => navigation.navigate('Wallet')}
-            color="#FF6B9D"
-          />
+          {/* Personal Section */}
+          <Text style={styles.sectionTitle}>Personal</Text>
           
-          <ProfileOption
-            icon="gift-outline"
-            title="Rewards"
-            onPress={() => navigation.navigate('Rewards')}
-            color="#FF6B9D"
-          />
-          
-          <ProfileOption
-            icon="trophy-outline"
-            title="Loyalty Points"
-            onPress={() => navigation.navigate('LoyaltyPoints')}
-            color="#FF6B9D"
-          />
-
-          {/* Quick Access Section */}
-          <Text style={styles.sectionTitle}>Quick Access</Text>
-          
-          <ProfileOption
+                    <ProfileOption
             icon="cart-outline"
             title="My Cart"
             subtitle={`${cartItemCount} items in your cart`}
@@ -252,53 +228,7 @@ const ProfilePage = ({ navigation }) => {
             badgeCount={cartItemCount}
             color="#FF6B9D"
           />
-          
-          <ProfileOption
-            icon="notifications-outline"
-            title="Notifications"
-            subtitle="View your notifications"
-            onPress={() => navigation.navigate('Notifications')}
-            color="#FF6B9D"
-          />
 
-          {/* Admin Access Section */}
-          <Text style={styles.sectionTitle}>Admin Access</Text>
-          
-          <ProfileOption
-            icon="cloud-upload-outline"
-            title="Admin Upload"
-            subtitle="Upload admin content"
-            onPress={() => navigation.navigate('AdminUpload')}
-            color="#FF6B9D"
-          />
-          
-          <ProfileOption
-            icon="bag-add-outline"
-            title="Product Upload"
-            subtitle="Add new products"
-            onPress={() => navigation.navigate('ProductUploadScreen')}
-            color="#FF6B9D"
-          />
-          
-          <ProfileOption
-            icon="image-outline"
-            title="Media Upload"
-            subtitle="Upload media files"
-            onPress={() => navigation.navigate('MediaUploadScreen')}
-            color="#FF6B9D"
-          />
-
-          <ProfileOption
-            icon="settings-outline"
-            title="Booking Management"
-            subtitle="Manage all bookings"
-            onPress={() => navigation.navigate('BookingManagement')}
-            color="#FF6B9D"
-          />
-
-          {/* Personal Section */}
-          <Text style={styles.sectionTitle}>Personal</Text>
-          
           <ProfileOption
             icon="heart-outline"
             title="My Wishlist"
@@ -338,33 +268,41 @@ const ProfilePage = ({ navigation }) => {
             icon="star-outline"
             title="Rate Us"
             subtitle="Share your experience"
-            onPress={() => navigation.navigate('RateUs')}
+            onPress={() => Linking.openURL('https://tobo-salon.vercel.app/terms')}
             color="#FF6B9D"
           />
+ {/* Legal Section */}
+<Text style={styles.sectionTitle}>Legal</Text>
 
-          {/* Legal Section */}
-          <Text style={styles.sectionTitle}>Legal</Text>
-          
-          <ProfileOption
-            icon="document-text-outline"
-            title="Terms & Conditions"
-            subtitle="Read our terms"
-            onPress={() => navigation.navigate('Terms')}
-            color="#FF6B9D"
-          />
-          
-          <ProfileOption
-            icon="shield-checkmark-outline"
-            title="Privacy Policy"
-            subtitle="Your privacy matters"
-            onPress={() => navigation.navigate('Privacy')}
-            color="#FF6B9D"
-          />
+<ProfileOption
+  icon="document-text-outline"
+  title="Terms & Conditions"
+  subtitle="Read our terms"
+  onPress={() => Linking.openURL('https://tobo-salon.vercel.app/terms')}
+  color="#FF6B9D"
+/>
+
+<ProfileOption
+  icon="shield-checkmark-outline"
+  title="Privacy Policy"
+  subtitle="Your privacy matters"
+  onPress={() => Linking.openURL('https://tobo-salon.vercel.app/privacy')}
+  color="#FF6B9D"
+/>
+
+          {/* Account Actions */}
+          <Text style={styles.sectionTitle}>Account Actions</Text>
 
           {/* Logout */}
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <Icon name="log-out-outline" size={20} color="#FF6B9D" />
             <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+
+          {/* Delete Account - Now navigates to dedicated screen */}
+          <TouchableOpacity style={styles.deleteAccountButton} onPress={handleDeleteAccount}>
+            <Icon name="trash-outline" size={20} color="#FF4444" />
+            <Text style={styles.deleteAccountText}>Delete Account</Text>
           </TouchableOpacity>
         </Animated.View>
 
@@ -517,10 +455,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 25,
+    marginTop: 10,
+    marginBottom: 8,
   },
   logoutText: {
     color: '#FF6B9D',
+    fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+
+  // Delete Account Button
+  deleteAccountButton: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#FFE6E6',
+  },
+  deleteAccountText: {
+    color: '#FF4444',
     fontSize: 16,
     fontWeight: '500',
     marginLeft: 8,

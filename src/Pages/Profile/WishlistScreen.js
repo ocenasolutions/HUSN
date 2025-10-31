@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Image,
   SafeAreaView,
   ActivityIndicator,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../../contexts/AuthContext';
+import Header  from '../../Components/Header';
 import { API_URL } from '../../API/config';
 
 const WishlistScreen = ({ navigation }) => {
@@ -115,8 +115,8 @@ const WishlistScreen = ({ navigation }) => {
         <Image 
           source={{ 
             uri: item.product.primaryImage || 
-                 (item.product.images && item.product.images[0]?.url) || 
-                 'https://via.placeholder.com/100x100?text=No+Image'
+                (item.product.images && item.product.images[0]?.url) || 
+                'https://via.placeholder.com/100x100?text=No+Image'
           }} 
           style={styles.itemImage}
           resizeMode="cover"
@@ -191,6 +191,7 @@ const WishlistScreen = ({ navigation }) => {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
+        <Header/>
         <View style={styles.header}>
           <TouchableOpacity 
             style={styles.backButton}
@@ -211,18 +212,19 @@ const WishlistScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+            <Header/>
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => navigation.goBack()}
-        >
+        >        
+
           <Icon name="arrow-back" size={24} color="#2C3E50" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Wishlist</Text>
         <View style={styles.headerRight}>
           <Text style={styles.itemCount}>{wishlistItems.length} items</Text>
-        </View>
+        </View>   
       </View>
 
       {wishlistItems.length === 0 ? renderEmptyWishlist() : (

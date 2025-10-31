@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 // import Header from '../../Components/Header';
-// import Footer from '../../Components/Footer';
+import Footer from '../../Components/Footer';
 
 const OrderConfirmationScreen = ({ navigation, route }) => {
   const { orderData } = route.params || {};
@@ -20,10 +20,8 @@ const OrderConfirmationScreen = ({ navigation, route }) => {
   const [scaleAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
-    // Show loading for 2 seconds
     const timer = setTimeout(() => {
       setLoading(false);
-      // Start animations after loading
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
@@ -45,13 +43,12 @@ const OrderConfirmationScreen = ({ navigation, route }) => {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-              {/* <Header /> */}
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FF1493" />
           <Text style={styles.loadingText}>Processing your order...</Text>
           <Text style={styles.loadingSubText}>Please wait while we confirm your order</Text>
         </View>
-        <Footer />
+        {/* <Footer /> */}
       </SafeAreaView>
     );
   }
@@ -86,13 +83,13 @@ const OrderConfirmationScreen = ({ navigation, route }) => {
           )}
 
           <View style={styles.buttonsContainer}>
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.trackButton}
               onPress={() => navigation.navigate('TrackOrder', { orderData })}
             >
               <Icon name="location" size={20} color="#FFFFFF" />
               <Text style={styles.trackButtonText}>Track Order</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             <TouchableOpacity
               style={styles.continueButton}

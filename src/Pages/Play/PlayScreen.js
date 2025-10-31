@@ -30,7 +30,6 @@ const PlayScreen = ({ navigation }) => {
   
   const flatListRef = useRef(null);
 
-  // Shuffle array function for random order
   const shuffleArray = (array) => {
     const shuffled = [...array];
     for (let i = shuffled.length - 1; i > 0; i--) {
@@ -43,16 +42,10 @@ const PlayScreen = ({ navigation }) => {
   const fetchMediaData = async () => {
     try {
       setLoading(true);
-      
-      // Fetch videos
       const videosResponse = await fetch(`${API_URL}/media/videos`);
       const videosData = await videosResponse.json();
-      
-      // Fetch images
       const imagesResponse = await fetch(`${API_URL}/media/images`);
       const imagesData = await imagesResponse.json();
-      
-      // Combine and shuffle all media content
       const allMedia = [
         ...(videosData.data || []).map(item => ({ ...item, type: 'video' })),
         ...(imagesData.data || []).map(item => ({ ...item, type: 'image' }))
