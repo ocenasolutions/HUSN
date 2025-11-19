@@ -1,4 +1,4 @@
-// src/Pages/Cart/ViewCartScreen.js
+// src/Pages/Cart/ViewCartScreen.js - Updated with separate checkout navigation
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -38,11 +38,11 @@ const ViewCartScreen = ({ navigation }) => {
     try {
       if (showLoader) setLoading(true);
       
-      // Fetch both service and product cart items concurrently
       const [servicesResponse, productsResponse] = await Promise.all([
         fetch(`${API_URL}/cart`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/product-cart`, { headers: getAuthHeaders() })
       ]);
+      
       const servicesData = await servicesResponse.json();
       const productsData = await productsResponse.json();
 
@@ -66,7 +66,6 @@ const ViewCartScreen = ({ navigation }) => {
     }
   };
 
-  // Refresh data when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       fetchAllCartItems();
@@ -268,6 +267,7 @@ const ViewCartScreen = ({ navigation }) => {
           ) : (
             <Text style={styles.quantityText}>{item.quantity}</Text>
           )}
+          
           <TouchableOpacity
             style={styles.quantityButton}
             onPress={() => updateProductQuantity(item._id, item.quantity + 1)}
@@ -292,13 +292,17 @@ const ViewCartScreen = ({ navigation }) => {
       
       <View style={styles.itemDetails}>
         <Text style={styles.itemName}>{item.service?.name || 'Service'}</Text>
-        <Text style={styles.professionalName}>by {item.professionalName}</Text>
-        <View style={styles.scheduleInfo}>
-          <Icon name="calendar-outline" size={14} color="#7F8C8D" />
-          <Text style={styles.scheduleText}>
-            {formatDate(item.selectedDate)} at {item.selectedTime}
-          </Text>
-        </View>
+        {item.professionalName && (
+          <Text style={styles.professionalName}>by {item.professionalName}</Text>
+        )}
+        {item.selectedDate && item.selectedTime && (
+          <View style={styles.scheduleInfo}>
+            <Icon name="calendar-outline" size={14} color="#7F8C8D" />
+            <Text style={styles.scheduleText}>
+              {formatDate(item.selectedDate)} at {item.selectedTime}
+            </Text>
+          </View>
+        )}
         {item.notes && (
           <Text style={styles.notes}>Note: {item.notes}</Text>
         )}
@@ -344,13 +348,13 @@ const ViewCartScreen = ({ navigation }) => {
         <TouchableOpacity
           style={styles.browseButton}
           onPress={() => navigation.navigate('Services')}
->
+        >
           <Text style={styles.browseButtonText}>Browse Services</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.browseButton, styles.browseButtonSecondary]}
           onPress={() => navigation.navigate('Product')}
->
+        >
           <Text style={styles.browseButtonTextSecondary}>Browse Products</Text>
         </TouchableOpacity>
       </View>
@@ -443,7 +447,7 @@ const ViewCartScreen = ({ navigation }) => {
               
               <TouchableOpacity
                 style={styles.checkoutButton}
-                onPress={() => navigation.navigate('Checkout')}
+                onPress={() => navigation.navigate('CheckoutService')}
               >
                 <Icon name="arrow-forward" size={16} color="#fff" />
                 <Text style={styles.checkoutButtonText}>Checkout Services</Text>
@@ -470,7 +474,7 @@ const ViewCartScreen = ({ navigation }) => {
               
               <TouchableOpacity
                 style={styles.checkoutButton}
-                onPress={() => navigation.navigate('Checkout')}
+                onPress={() => navigation.navigate('CheckoutProduct')}
               >
                 <Icon name="arrow-forward" size={16} color="#fff" />
                 <Text style={styles.checkoutButtonText}>Checkout Products</Text>

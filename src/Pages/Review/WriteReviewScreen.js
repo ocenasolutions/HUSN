@@ -64,23 +64,24 @@ const WriteReviewScreen = ({ route, navigation }) => {
   };
 
   const handleSubmit = async () => {
-    if (rating === 0) {
-      Alert.alert('Rating Required', 'Please select a star rating');
-      return;
+  if (rating === 0) {
+    Alert.alert('Rating Required', 'Please select a star rating');
+    return;
+  }
+
+  try {
+    setSubmitting(true);
+
+    const formData = new FormData();
+    formData.append('orderId', orderId);
+    formData.append('itemId', item.itemId);
+    formData.append('type', item.type);
+    formData.append('rating', rating.toString());
+    formData.append('comment', comment);
+    if (item.type === 'professional' && item.professionalId) {
+      formData.append('professionalId', item.professionalId);
     }
-
-    try {
-      setSubmitting(true);
-
-      const formData = new FormData();
-      formData.append('orderId', orderId);
-      formData.append('itemId', item.itemId);
-      formData.append('type', item.type);
-      formData.append('rating', rating.toString());
-      formData.append('comment', comment);
-
-      // Add media files
-      media.forEach((file, index) => {
+    media.forEach((file, index) => {
         formData.append('media', {
           uri: Platform.OS === 'ios' ? file.uri.replace('file://', '') : file.uri,
           type: file.type,

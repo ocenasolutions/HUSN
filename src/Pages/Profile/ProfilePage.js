@@ -207,19 +207,57 @@ const ProfilePage = ({ navigation }) => {
             },
           ]}
         >
-      <Text style={styles.sectionTitle}>Services/Products Info</Text>
+
+                <Text style={styles.sectionTitle}>HUSN Wallet</Text>
           <ProfileOption
+            icon="wallet-outline"
+            title="My Wallet"
+            onPress={() => navigation.navigate('Wallet')}
+            color="#FF6B9D"
+          />           
+  
+          <ProfileOption
+            icon="gift-outline"
+            title="Buy Gift Card"
+            subtitle="Send gift cards to friends & family"
+            onPress={() => navigation.navigate('BuyGiftCard')}
+            color="#FF6B9D"
+          />
+          
+          <ProfileOption
+            icon="card-outline"
+            title="Claim Gift Card"
+            subtitle="Redeem a gift card you received"
+            onPress={() => navigation.navigate('ClaimGiftCard')}
+            color="#FF6B9D"
+          />
+
+
+      <Text style={styles.sectionTitle}>Services/Products Info</Text>
+          {/* <ProfileOption
             icon="bag-outline"
             title="My Orders"
             onPress={() => navigation.navigate('MyOrders')}
             color="#FF6B9D"
-          />          
+          />           */}
 
+          <ProfileOption
+            icon="bag-outline"
+            title="My Products"
+            onPress={() => navigation.navigate('ProductsOrder')}
+            color="#FF6B9D"
+          />          
+          <ProfileOption
+            icon="bag-outline"
+            title="My Services"
+            onPress={() => navigation.navigate('ServicesOrder')}
+            color="#FF6B9D"
+          />
           
           {/* Personal Section */}
           <Text style={styles.sectionTitle}>Personal</Text>
           
-                    <ProfileOption
+          <ProfileOption
             icon="cart-outline"
             title="My Cart"
             subtitle={`${cartItemCount} items in your cart`}
@@ -244,6 +282,37 @@ const ProfilePage = ({ navigation }) => {
             onPress={() => navigation.navigate('SavedAddresses')}
             color="#FF6B9D"
           />
+
+          <ProfileOption
+            icon="person-outline"
+            title="Salon Out"
+            subtitle="Checkout our salons"
+            onPress={() => navigation.navigate('Salons')}
+            color="#FF6B9D"
+          />
+
+          <ProfileOption
+            icon="person-outline"
+            title="Salon Out"
+            subtitle="Checkout our salons"
+            onPress={() => navigation.navigate('UserBookingsScreen')}
+            color="#FF6B9D"
+          />
+          {/* <ProfileOption
+            icon="star-outline"
+            title="Request Ride"
+            subtitle="Ride Request"
+            onPress={() => navigation.navigate('RequestRide')}
+            color="#FF6B9D"
+          />
+
+          <ProfileOption
+            icon="star-outline"
+            title="UseLiveTrackingScreen"
+            subtitle="UseLiveTrackingScreen"
+            onPress={() => navigation.navigate('UserLiveTrackingScreen')}
+            color="#FF6B9D"
+          /> */}
 
           {/* Support Section */}
           <Text style={styles.sectionTitle}>Support & Info</Text>

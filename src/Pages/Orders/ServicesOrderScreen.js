@@ -1,4 +1,4 @@
-// src/Pages/Orders/MyOrdersScreen.js - Updated with Rate Professional Button
+// src/Pages/Orders/ServicesOrderScreen.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -19,16 +19,16 @@ import { API_URL } from '../../API/config';
 import Header from '../../Components/Header';
 import Footer from '../../Components/Footer';
 
-const MyOrdersScreen = ({ navigation }) => {
+
+const ServicesOrderScreen = ({ navigation }) => {
   const { user, tokens } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState('All');
-  const [selectedTab, setSelectedTab] = useState('All');
   const [reviewedProfessionals, setReviewedProfessionals] = useState(new Set());
 
-  const statusFilters = ['All', 'placed', 'confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
+  const statusFilters = ['All', 'pending', 'confirmed', 'in_progress', 'completed', 'cancelled'];
 
   const getAuthHeaders = () => {
     const token = tokens?.accessToken || user?.token;
@@ -54,7 +54,10 @@ const MyOrdersScreen = ({ navigation }) => {
       
       if (data.success) {
         const allOrders = data.data?.orders || data.data || [];
-        setOrders(allOrders);
+        const serviceOrders = allOrders.filter(order => 
+          order.serviceItems && order.serviceItems.length > 0
+        );
+        setOrders(serviceOrders);
       } else {
         Alert.alert('Error', data.message || 'Failed to load orders');
       }
@@ -87,6 +90,8 @@ const MyOrdersScreen = ({ navigation }) => {
     }
   };
 
+  
+
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchOrders();
@@ -94,15 +99,117 @@ const MyOrdersScreen = ({ navigation }) => {
     setRefreshing(false);
   };
 
-  const cancelOrder = async (orderId) => {
+const cancelOrder = async (orderId) => {
+  try {
+    const order = orders.find(o => o._id === orderId);
+    
+    if (!order || !order.serviceItems || order.serviceItems.length === 0) {
+      Alert.alert('Error', 'Invalid order');
+      return;
+    }
+
+    // Calculate timing and amounts
+    let isLateCancellation = false;
+    let penaltyAmount = 0;
+    let refundAmount = 0;
+    let serviceTotalAmount = 0;
+    const now = new Date();
+
+    for (const serviceItem of order.serviceItems) {
+      const itemTotal = serviceItem.price * serviceItem.quantity;
+      serviceTotalAmount += itemTotal;
+
+      if (serviceItem.selectedDate && serviceItem.selectedTime) {
+        const [hours, minutes] = serviceItem.selectedTime.split(':');
+        const serviceDateTime = new Date(serviceItem.selectedDate);
+        serviceDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+        
+        const timeDifference = serviceDateTime - now;
+        const hoursDifference = timeDifference / (1000 * 60 * 60);
+        
+        if (hoursDifference > 0 && hoursDifference <= 2) {
+          isLateCancellation = true;
+          penaltyAmount += itemTotal * 0.5;
+          refundAmount += itemTotal * 0.5;
+        } else if (hoursDifference > 2) {
+          refundAmount += itemTotal;
+        }
+      }
+    }
+
+    // Build alert message based on payment method
+    let alertTitle = '';
+    let alertMessage = '';
+    let buttonText = '';
+    
+    const paymentMethod = order.paymentMethod;
+
+    if (isLateCancellation) {
+      // LATE CANCELLATION (within 2 hours)
+      alertTitle = '⚠️ Late Cancellation Fee';
+      
+      if (paymentMethod === 'wallet') {
+        alertMessage = `You are cancelling within 2 hours of service time.\n\n` +
+          `📊 Breakdown:\n` +
+          `• Service Amount: ₹${serviceTotalAmount.toFixed(2)}\n` +
+          `• Penalty (50%): ₹${penaltyAmount.toFixed(2)}\n` +
+          `• Refund to Wallet (50%): ₹${refundAmount.toFixed(2)}\n\n` +
+          `The penalty has already been deducted when you paid. You'll get 50% back.`;
+        buttonText = 'Yes, Cancel & Get 50% Refund';
+      } 
+      else if (paymentMethod === 'cod') {
+        alertMessage = `You are cancelling within 2 hours of service time.\n\n` +
+          `📊 Cancellation Fee:\n` +
+          `• Service Amount: ₹${serviceTotalAmount.toFixed(2)}\n` +
+          `• Penalty (50%): ₹${penaltyAmount.toFixed(2)}\n\n` +
+          `This penalty will be deducted from your wallet. If insufficient balance, a debt will be created that must be cleared before booking new services.`;
+        buttonText = 'Yes, Pay Fee & Cancel';
+      } 
+      else { // online/UPI
+        alertMessage = `You are cancelling within 2 hours of service time.\n\n` +
+          `📊 Refund Breakdown:\n` +
+          `• Paid Amount: ₹${serviceTotalAmount.toFixed(2)}\n` +
+          `• Penalty (50%): ₹${penaltyAmount.toFixed(2)}\n` +
+          `• Refund to Wallet (50%): ₹${refundAmount.toFixed(2)}\n\n` +
+          `50% will be refunded to your wallet within 5-7 business days.`;
+        buttonText = 'Yes, Cancel & Get 50% Refund';
+      }
+    } else {
+      // EARLY CANCELLATION (more than 2 hours before)
+      alertTitle = 'Cancel Service Order';
+      
+      if (paymentMethod === 'wallet') {
+        alertMessage = `You are cancelling more than 2 hours before service time.\n\n` +
+          `💰 Full Refund:\n` +
+          `• Service Amount: ₹${serviceTotalAmount.toFixed(2)}\n` +
+          `• Refund to Wallet (100%): ₹${serviceTotalAmount.toFixed(2)}\n\n` +
+          `No penalty will be charged. Full amount will be refunded to your wallet.`;
+        buttonText = 'Yes, Cancel & Get Full Refund';
+      } 
+      else if (paymentMethod === 'cod') {
+        alertMessage = `You are cancelling more than 2 hours before service time.\n\n` +
+          `✅ No charges will be applied.\n` +
+          `No payment was made yet (COD), so there's nothing to refund.`;
+        buttonText = 'Yes, Cancel Order';
+      } 
+      else { // online/UPI
+        alertMessage = `You are cancelling more than 2 hours before service time.\n\n` +
+          `💰 Full Refund:\n` +
+          `• Paid Amount: ₹${serviceTotalAmount.toFixed(2)}\n` +
+          `• Refund to Wallet (100%): ₹${serviceTotalAmount.toFixed(2)}\n\n` +
+          `Full amount will be refunded to your wallet within 5-7 business days.`;
+        buttonText = 'Yes, Cancel & Get Full Refund';
+      }
+    }
+
     Alert.alert(
-      'Cancel Order',
-      'Are you sure you want to cancel this order?',
+      alertTitle,
+      alertMessage,
       [
-        { text: 'No', style: 'cancel' },
+        { text: 'No, Keep Order', style: 'cancel' },
         {
-          text: 'Yes, Cancel',
-          style: 'destructive',
+          text: buttonText,
+          style: isLateCancellation ? 'destructive' : 'default',
           onPress: async () => {
             try {
               const response = await fetch(`${API_URL}/orders/${orderId}/cancel`, {
@@ -112,9 +219,42 @@ const MyOrdersScreen = ({ navigation }) => {
               });
               
               const data = await response.json();
+              
               if (data.success) {
                 fetchOrders();
-                Alert.alert('Success', 'Order cancelled successfully');
+                
+                // Show success message with transaction details
+                if (data.data?.cancellationDetails) {
+                  const details = data.data.cancellationDetails;
+                  let successMsg = '';
+                  
+                  if (details.isLateCancellation) {
+                    if (details.debtCreated) {
+                      successMsg = `Order cancelled.\n\n` +
+                        `⚠️ Outstanding Balance: ₹${details.debtAmount.toFixed(2)}\n\n` +
+                        `Please clear this debt before booking new services.`;
+                    } else if (details.refundAmount > 0) {
+                      successMsg = `Order cancelled.\n\n` +
+                        `💰 Refunded: ₹${details.refundAmount.toFixed(2)}\n` +
+                        `⚠️ Penalty: ₹${details.penaltyAmount.toFixed(2)}`;
+                    } else {
+                      successMsg = `Order cancelled.\n\n` +
+                        `⚠️ Penalty Charged: ₹${details.penaltyAmount.toFixed(2)}`;
+                    }
+                  } else {
+                    if (details.refundAmount > 0) {
+                      successMsg = `Order cancelled successfully!\n\n` +
+                        `💰 Full Refund: ₹${details.refundAmount.toFixed(2)}\n` +
+                        `Credited to your wallet.`;
+                    } else {
+                      successMsg = 'Order cancelled successfully!';
+                    }
+                  }
+                  
+                  Alert.alert('✓ Cancellation Complete', successMsg);
+                } else {
+                  Alert.alert('Success', data.message || 'Order cancelled successfully');
+                }
               } else {
                 Alert.alert('Error', data.message || 'Failed to cancel order');
               }
@@ -125,7 +265,11 @@ const MyOrdersScreen = ({ navigation }) => {
         },
       ]
     );
-  };
+  } catch (error) {
+    console.error('Cancel order error:', error);
+    Alert.alert('Error', 'Failed to process cancellation');
+  }
+};
 
   const handleRateProfessional = (order, serviceItem) => {
     const item = {
@@ -150,8 +294,8 @@ const MyOrdersScreen = ({ navigation }) => {
     return reviewedProfessionals.has(`${orderId}-${professionalId}`);
   };
 
-  const getStatusColor = (status, type) => {
-    const serviceColors = {
+  const getStatusColor = (status) => {
+    const colors = {
       pending: '#F39C12',
       confirmed: '#27AE60',
       rejected: '#E74C3C',
@@ -159,39 +303,17 @@ const MyOrdersScreen = ({ navigation }) => {
       completed: '#8E44AD',
       cancelled: '#95A5A6',
     };
-
-    const productColors = {
-      placed: '#FF9F43',
-      confirmed: '#27AE60',
-      shipped: '#3498DB',
-      out_for_delivery: '#9B59B6',
-      delivered: '#2ECC71',
-      cancelled: '#E74C3C',
-      preparing: '#3498DB',
-    };
-
-    const serviceStatuses = ['pending', 'in_progress', 'completed', 'rejected'];
-    const isService = type === 'service' || serviceStatuses.includes(status);
-
-    return isService 
-      ? (serviceColors[status] || '#7F8C8D')
-      : (productColors[status?.toLowerCase()] || '#7F8C8D');
+    return colors[status] || '#7F8C8D';
   };
 
   const getStatusIcon = (status) => {
     switch (status?.toLowerCase()) {
-      case 'placed':
       case 'pending':
         return 'time-outline';
       case 'confirmed':
         return 'checkmark-circle-outline';
-      case 'shipped':
-      case 'preparing':
-        return 'cube-outline';
-      case 'out_for_delivery':
       case 'in_progress':
-        return 'car-outline';
-      case 'delivered':
+        return 'construct-outline';
       case 'completed':
         return 'checkmark-done-circle';
       case 'cancelled':
@@ -204,73 +326,22 @@ const MyOrdersScreen = ({ navigation }) => {
 
   const getStatusDisplayName = (status) => {
     const names = {
-      placed: 'Placed',
       pending: 'Pending',
       confirmed: 'Confirmed',
-      preparing: 'Preparing',
-      shipped: 'Shipped',
-      out_for_delivery: 'Out for Delivery',
-      delivered: 'Delivered',
+      in_progress: 'In Progress',
       completed: 'Completed',
       cancelled: 'Cancelled',
       rejected: 'Rejected',
-      in_progress: 'In Progress',
     };
     return names[status?.toLowerCase()] || status;
   };
 
-  const getFilteredOrdersByTab = () => {
-    let tabFiltered = orders;
-    
-    if (selectedTab === 'Services') {
-      tabFiltered = orders.filter(order => 
-        order.serviceItems && order.serviceItems.length > 0 && 
-        (!order.productItems || order.productItems.length === 0)
-      );
-    } else if (selectedTab === 'Products') {
-      tabFiltered = orders.filter(order => 
-        order.productItems && order.productItems.length > 0 && 
-        (!order.serviceItems || order.serviceItems.length === 0)
-      );
-    }
-    
+  const getFilteredOrders = () => {
     if (selectedStatus === 'All') {
-      return tabFiltered;
+      return orders;
     }
-    return tabFiltered.filter(order => order.status === selectedStatus);
+    return orders.filter(order => order.status === selectedStatus);
   };
-
-  const StatusFilter = ({ status, selected, onPress }) => (
-    <TouchableOpacity
-      style={[styles.filterButton, selected && styles.selectedFilterButton]}
-      onPress={onPress}
-    >
-      <Text style={[styles.filterButtonText, selected && styles.selectedFilterButtonText]}>
-        {status === 'All' ? 'All' : getStatusDisplayName(status)}
-      </Text>
-    </TouchableOpacity>
-  );
-
-  const TabButton = ({ tab, label, icon, selected, onPress, count }) => (
-    <TouchableOpacity
-      style={[styles.tabButton, selected && styles.selectedTabButton]}
-      onPress={onPress}
-    >
-      <View style={styles.tabContent}>
-        <Icon name={icon} size={20} color={selected ? '#FF6B9D' : '#7F8C8D'} />
-        <Text style={[styles.tabLabel, selected && styles.selectedTabLabel]}>
-          {label}
-        </Text>
-        {count > 0 && (
-          <View style={[styles.tabBadge, selected && styles.selectedTabBadge]}>
-            <Text style={[styles.tabBadgeText, selected && styles.selectedTabBadgeText]}>
-              {count}
-            </Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-IN', {
@@ -280,98 +351,43 @@ const MyOrdersScreen = ({ navigation }) => {
     });
   };
 
-  const getOrderItems = (order) => {
-    const items = [];
-    
-    if (order.serviceItems && order.serviceItems.length > 0) {
-      order.serviceItems.forEach(item => {
-        items.push({
-          ...item,
-          name: item.serviceId?.name || 'Service',
-          type: 'service',
-          quantity: item.quantity,
-          price: item.price,
-          image_url: item.serviceId?.image_url || 'https://via.placeholder.com/50x50',
-          selectedDate: item.selectedDate,
-          selectedTime: item.selectedTime,
-          professionalId: item.professionalId,
-          professionalName: item.professionalName
-        });
-      });
-    }
-    
-    if (order.productItems && order.productItems.length > 0) {
-      order.productItems.forEach(item => {
-        items.push({
-          name: item.productId?.name || 'Product',
-          type: 'product',
-          quantity: item.quantity,
-          price: item.price,
-          image_url: item.productId?.primaryImage || item.productId?.images?.[0]?.url || 'https://via.placeholder.com/50x50'
-        });
-      });
-    }
-    
-    return items;
-  };
-
-  const getOrderTypeBadge = (order) => {
-    const hasServices = order.serviceItems && order.serviceItems.length > 0;
-    const hasProducts = order.productItems && order.productItems.length > 0;
-    
-    if (hasServices && hasProducts) {
-      return { label: 'Mixed', icon: 'cube-outline', color: '#9B59B6' };
-    } else if (hasServices) {
-      return { label: 'Service', icon: 'cut-outline', color: '#FF6B9D' };
-    } else {
-      return { label: 'Product', icon: 'bag-outline', color: '#54A0FF' };
-    }
-  };
-
-  const getOrderCounts = () => {
-    const serviceOrders = orders.filter(order => 
-      order.serviceItems && order.serviceItems.length > 0 && 
-      (!order.productItems || order.productItems.length === 0)
-    ).length;
-    
-    const productOrders = orders.filter(order => 
-      order.productItems && order.productItems.length > 0 && 
-      (!order.serviceItems || order.serviceItems.length === 0)
-    ).length;
-    
-    return { all: orders.length, services: serviceOrders, products: productOrders };
-  };
-
   const shouldShowOtp = (order) => {
-    const hasServices = order.serviceItems && order.serviceItems.length > 0;
-    const canShowOtp = ['placed', 'confirmed', 'out_for_delivery'].includes(order.status);
-    return hasServices && canShowOtp && order.serviceOtp;
+    const canShowOtp = ['pending', 'confirmed', 'in_progress'].includes(order.status);
+    return canShowOtp && order.serviceOtp;
   };
 
-  const renderServiceItemWithProfessional = (item, index, order) => {
+  const renderServiceItem = (item, index, order) => {
     const hasProfessional = item.professionalId && item.professionalName;
-    const isDelivered = order.status === 'delivered';
+    const isCompleted = order.status === 'completed';
+    const isCancelled = order.status === 'cancelled';
     const reviewed = hasProfessional && isProfessionalReviewed(order._id, item.professionalId);
     
     return (
       <View key={index} style={styles.serviceItemContainer}>
-        <View style={styles.orderItem}>
-          <Image source={{ uri: item.image_url }} style={styles.itemImage} />
+        <View style={[styles.orderItem, isCancelled && styles.fadedItem]}>
+          <Image 
+            source={{ uri: item.serviceId?.image_url || 'https://via.placeholder.com/50x50' }} 
+            style={[styles.itemImage, isCancelled && styles.fadedImage]} 
+          />
           <View style={styles.itemDetails}>
-            <Text style={styles.itemName}>{item.name}</Text>
-            <Text style={styles.itemType}>
-              âœ‚ï¸ Service â€¢ Qty: {item.quantity}
+            <Text style={[styles.itemName, isCancelled && styles.fadedText]}>
+              {item.serviceId?.name || 'Service'}
+            </Text>
+            <Text style={[styles.itemType, isCancelled && styles.fadedText]}>
+              ✂️ Service • Qty: {item.quantity}
             </Text>
             {item.selectedDate && (
-              <Text style={styles.itemSchedule}>
-                ðŸ“… {formatDate(item.selectedDate)} at {item.selectedTime}
+              <Text style={[styles.itemSchedule, isCancelled && styles.fadedText]}>
+                📅 {formatDate(item.selectedDate)} at {item.selectedTime}
               </Text>
             )}
           </View>
-          <Text style={styles.itemPrice}>â‚¹{item.price}</Text>
+          <Text style={[styles.itemPrice, isCancelled && styles.fadedText]}>
+            ₹{item.price}
+          </Text>
         </View>
         
-        {hasProfessional && (
+        {hasProfessional && !isCancelled && (
           <View style={styles.professionalCard}>
             <View style={styles.professionalHeader}>
               <Icon name="person-circle" size={20} color="#4CAF50" />
@@ -396,8 +412,7 @@ const MyOrdersScreen = ({ navigation }) => {
               </View>
             </View>
 
-            {/* Rate Professional Button - Only show if delivered and not reviewed */}
-            {isDelivered && !reviewed && (
+            {isCompleted && !reviewed && (
               <TouchableOpacity
                 style={styles.rateProfessionalButton}
                 onPress={() => handleRateProfessional(order, item)}
@@ -407,8 +422,7 @@ const MyOrdersScreen = ({ navigation }) => {
               </TouchableOpacity>
             )}
 
-            {/* Already Reviewed Badge */}
-            {isDelivered && reviewed && (
+            {isCompleted && reviewed && (
               <View style={styles.reviewedProfessionalBadge}>
                 <Icon name="checkmark-circle" size={16} color="#2ECC71" />
                 <Text style={styles.reviewedProfessionalText}>Professional Reviewed</Text>
@@ -420,190 +434,152 @@ const MyOrdersScreen = ({ navigation }) => {
     );
   };
 
-  const renderOrderItem = ({ item: order }) => {
-    const orderItems = getOrderItems(order);
-    const typeBadge = getOrderTypeBadge(order);
-    const orderType = typeBadge.label === 'Service' ? 'service' : 'product';
-    const showOtp = shouldShowOtp(order);
-    
-    const serviceItems = orderItems.filter(item => item.type === 'service');
-    const productItems = orderItems.filter(item => item.type === 'product');
-    
-    return (
-      <View style={styles.orderCard}>
-        <View style={styles.orderHeader}>
-          <View style={styles.orderIdContainer}>
-            <Text style={styles.orderIdLabel}>Order #{order.orderNumber}</Text>
-            <Text style={styles.orderDate}>
-              {formatDate(order.createdAt)}
+const renderOrderItem = ({ item: order }) => {
+  const showOtp = shouldShowOtp(order);
+  const isCancelled = order.status === 'cancelled';
+  const canCancel = ['pending', 'placed', 'confirmed'].includes(order.status?.toLowerCase());
+  
+  return (
+    <View style={[styles.orderCard, isCancelled && styles.cancelledOrderCard]}>
+      {/* Order Header */}
+      <View style={styles.orderHeader}>
+        <View style={styles.orderIdContainer}>
+          <Text style={[styles.orderIdLabel, isCancelled && styles.fadedText]}>
+            Service Order #{order.orderNumber}
+          </Text>
+          <Text style={[styles.orderDate, isCancelled && styles.fadedText]}>
+            {formatDate(order.createdAt)}
+          </Text>
+        </View>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) + '15' }]}>
+          <Icon name={getStatusIcon(order.status)} size={16} color={getStatusColor(order.status)} />
+          <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>
+            {getStatusDisplayName(order.status)}
+          </Text>
+        </View>
+      </View>
+
+      {/* OTP Section */}
+      {showOtp && (
+        <View style={styles.otpContainer}>
+          <View style={styles.otpHeader}>
+            <Icon name="shield-checkmark" size={20} color="#FF6B9D" />
+            <Text style={styles.otpHeaderText}>Service OTP</Text>
+          </View>
+          <View style={styles.otpBox}>
+            <Text style={styles.otpCode}>{order.serviceOtp}</Text>
+          </View>
+          <View style={styles.otpInstructionsContainer}>
+            <Icon name="information-circle-outline" size={18} color="#7F8C8D" />
+            <Text style={styles.otpInstructions}>
+              Share this OTP with the service professional when they arrive to start the service
             </Text>
           </View>
-          <View style={styles.badgeContainer}>
-            {selectedTab === 'All' && (
-              <View style={[styles.typeBadge, { backgroundColor: typeBadge.color + '15' }]}>
-                <Icon name={typeBadge.icon} size={14} color={typeBadge.color} />
-                <Text style={[styles.typeBadgeText, { color: typeBadge.color }]}>
-                  {typeBadge.label}
-                </Text>
-              </View>
-            )}
-            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status, orderType) + '15' }]}>
-              <Icon name={getStatusIcon(order.status)} size={16} color={getStatusColor(order.status, orderType)} />
-              <Text style={[styles.statusText, { color: getStatusColor(order.status, orderType) }]}>
-                {getStatusDisplayName(order.status)}
+          {order.status === 'in_progress' && (
+            <View style={styles.serviceInProgressBanner}>
+              <Icon name="construct" size={16} color="#3498DB" />
+              <Text style={styles.serviceInProgressText}>
+                Service in progress
               </Text>
             </View>
-          </View>
+          )}
         </View>
+      )}
 
-        {/* Service OTP Display */}
-        {showOtp && (
-          <View style={styles.otpContainer}>
-            <View style={styles.otpHeader}>
-              <Icon name="shield-checkmark" size={20} color="#FF6B9D" />
-              <Text style={styles.otpHeaderText}>Service OTP</Text>
-            </View>
-            <View style={styles.otpBox}>
-              <Text style={styles.otpCode}>{order.serviceOtp}</Text>
-            </View>
-            <View style={styles.otpInstructionsContainer}>
-              <Icon name="information-circle-outline" size={18} color="#7F8C8D" />
-              <Text style={styles.otpInstructions}>
-                Share this OTP with the service professional when they arrive to start the service
-              </Text>
-            </View>
-            {order.status === 'out_for_delivery' && (
-              <View style={styles.serviceInProgressBanner}>
-                <Icon name="construct" size={16} color="#3498DB" />
-                <Text style={styles.serviceInProgressText}>
-                  Service in progress
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
+      {/* Services List */}
+      <View style={styles.servicesSection}>
+        {order.serviceItems.map((item, index) => renderServiceItem(item, index, order))}
+      </View>
 
-        {/* Service Items with Professional Info */}
-        {serviceItems.length > 0 && (
-          <View style={styles.servicesSection}>
-            <View style={styles.sectionHeader}>
-              <Icon name="cut" size={16} color="#FF6B9D" />
-              <Text style={styles.sectionTitle}>Service Items</Text>
-            </View>
-            {serviceItems.map((item, index) => renderServiceItemWithProfessional(item, index, order))}
-          </View>
-        )}
-
-        {/* Product Items */}
-        {productItems.length > 0 && (
-          <View style={styles.orderItems}>
-            {productItems.slice(0, 2).map((item, index) => (
-              <View key={index} style={styles.orderItem}>
-                <Image source={{ uri: item.image_url }} style={styles.itemImage} />
-                <View style={styles.itemDetails}>
-                  <Text style={styles.itemName}>{item.name}</Text>
-                  <Text style={styles.itemType}>
-                    ðŸ“¦ Product â€¢ Qty: {item.quantity}
-                  </Text>
-                </View>
-                <Text style={styles.itemPrice}>â‚¹{item.price}</Text>
-              </View>
-            ))}
-            {productItems.length > 2 && (
-              <Text style={styles.moreItemsText}>
-                +{productItems.length - 2} more products
-              </Text>
-            )}
-          </View>
-        )}
-
-        <View style={styles.orderFooter}>
-          <View style={styles.orderTotal}>
-            <Text style={styles.totalLabel}>Total Amount</Text>
-            <Text style={styles.totalAmount}>â‚¹{order.totalAmount}</Text>
-          </View>
+      {/* Order Footer with Total and Actions */}
+      <View style={styles.orderFooter}>
+        <View style={styles.orderTotal}>
+          <Text style={[styles.totalLabel, isCancelled && styles.fadedText]}>
+            Total Amount
+          </Text>
+          <Text style={[styles.totalAmount, isCancelled && styles.fadedText]}>
+            ₹{order.totalAmount}
+          </Text>
+        </View>
+        
+        {/* Action Buttons */}
+        <View style={styles.orderActions}>
+          {/* Cancel Button - Shows for pending, placed, confirmed orders */}
+          {canCancel && !isCancelled && (
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => cancelOrder(order._id)}
+            >
+              <Icon name="close-circle-outline" size={18} color="#E74C3C" />
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          )}
           
-          <View style={styles.orderActions}>
-            {['placed'].includes(order.status?.toLowerCase()) && (
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => cancelOrder(order._id)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-            )}
-            
-            {order.status?.toLowerCase() === 'delivered' ? (
-              <TouchableOpacity
-                style={styles.rateOrderButton}
-                onPress={() => navigation.navigate('ReviewableItemsScreen', { 
-                  orderId: order._id
-                })}
-              >
-                <Icon name="star-outline" size={16} color="#FFD700" />
-                <Text style={styles.rateOrderButtonText}>Rate Items</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.viewDetailsButton}
-                onPress={() => navigation.navigate('TrackOrder', { 
-                  orderId: order._id,
-                  orderNumber: order.orderNumber,
-                  orderType: 'order'
-                })}
-              >
-                <Text style={styles.viewDetailsButtonText}>Track Order</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          {/* Primary Action Button */}
+          {!isCancelled && (
+            <>
+              {order.status?.toLowerCase() === 'completed' ? (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.rateButton]}
+                  onPress={() => navigation.navigate('ReviewableItemsScreen', { 
+                    orderId: order._id
+                  })}
+                >
+                  <Icon name="star-outline" size={18} color="#FFD700" />
+                  <Text style={styles.rateButtonText}>Rate Service</Text>
+                </TouchableOpacity>
+              ) : ['in_progress', 'out_for_delivery'].includes(order.status?.toLowerCase()) ? (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.trackButton]}
+                  onPress={() => navigation.navigate('TrackServiceScreen', { 
+                    orderId: order._id,
+                    orderNumber: order.orderNumber,
+                    orderType: 'service'
+                  })}
+                >
+                  <Icon name="location" size={18} color="#fff" />
+                  <Text style={styles.trackButtonText}>Track Live</Text>
+                </TouchableOpacity>
+              ) : canCancel && (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.detailsButton]}
+                  onPress={() => navigation.navigate('TrackServiceScreen', { 
+                    orderId: order._id,
+                    orderNumber: order.orderNumber,
+                    orderType: 'service'
+                  })}
+                >
+                  <Icon name="eye-outline" size={18} color="#fff" />
+                  <Text style={styles.detailsButtonText}>View Details</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
         </View>
       </View>
-    );
-  };
+    </View>
+  );
+};
 
   const renderEmptyOrders = () => {
-    let emptyMessage = "You haven't placed any orders yet.";
-    let emptyIcon = "receipt-outline";
-    
-    if (selectedTab === 'Services') {
-      emptyMessage = "You haven't ordered any services yet.";
-      emptyIcon = "cut-outline";
-    } else if (selectedTab === 'Products') {
-      emptyMessage = "You haven't ordered any products yet.";
-      emptyIcon = "bag-outline";
-    }
-    
     return (
       <View style={styles.emptyContainer}>
-        <Icon name={emptyIcon} size={80} color="#FF6B9D" />
-        <Text style={styles.emptyTitle}>No Orders Yet</Text>
-        <Text style={styles.emptySubtitle}>{emptyMessage}</Text>
-        <View style={styles.emptyButtons}>
-          {(selectedTab === 'All' || selectedTab === 'Services') && (
-            <TouchableOpacity
-              style={styles.shopNowButton}
-              onPress={() => navigation.navigate('MainTabs', { screen: 'Services' })}
-            >
-              <Text style={styles.shopNowText}>Browse Services</Text>
-            </TouchableOpacity>
-          )}
-          {(selectedTab === 'All' || selectedTab === 'Products') && (
-            <TouchableOpacity
-              style={[styles.shopNowButton, selectedTab !== 'All' && styles.shopNowButtonPrimary]}
-              onPress={() => navigation.navigate('MainTabs', { screen: 'Products' })}
-            >
-              <Text style={[styles.shopNowText, selectedTab === 'All' && styles.shopNowTextSecondary]}>
-                Browse Products
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        <Icon name="cut-outline" size={80} color="#FF6B9D" />
+        <Text style={styles.emptyTitle}>No Service Orders Yet</Text>
+        <Text style={styles.emptySubtitle}>
+          You haven't ordered any services yet. Browse our professional services to get started!
+        </Text>
+        <TouchableOpacity
+          style={styles.shopNowButton}
+          onPress={() => navigation.navigate('MainTabs', { screen: 'Services' })}
+        >
+          <Text style={styles.shopNowText}>Browse Services</Text>
+        </TouchableOpacity>
       </View>
     );
   };
 
-  const filteredOrders = getFilteredOrdersByTab();
-  const orderCounts = getOrderCounts();
+  const filteredOrders = getFilteredOrders();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -615,46 +591,11 @@ const MyOrdersScreen = ({ navigation }) => {
         >
           <Icon name="arrow-back" size={24} color="#2C3E50" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Orders</Text>
+        <Text style={styles.headerTitle}>Service Orders</Text>
         <View style={styles.headerRight}>
           <Text style={styles.orderCount}>{orders.length} orders</Text>
         </View>
       </View>
-
-      {orders.length > 0 && (
-        <View style={styles.tabsContainer}>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.tabsContent}
-          >
-            <TabButton
-              tab="All"
-              label="All Orders"
-              icon="apps-outline"
-              selected={selectedTab === 'All'}
-              onPress={() => setSelectedTab('All')}
-              count={orderCounts.all}
-            />
-            <TabButton
-              tab="Services"
-              label="Services"
-              icon="cut-outline"
-              selected={selectedTab === 'Services'}
-              onPress={() => setSelectedTab('Services')}
-              count={orderCounts.services}
-            />
-            <TabButton
-              tab="Products"
-              label="Products"
-              icon="bag-outline"
-              selected={selectedTab === 'Products'}
-              onPress={() => setSelectedTab('Products')}
-              count={orderCounts.products}
-            />
-          </ScrollView>
-        </View>
-      )}
 
       {orders.length > 0 && (
         <View style={styles.filtersContainer}>
@@ -664,12 +605,15 @@ const MyOrdersScreen = ({ navigation }) => {
             contentContainerStyle={styles.filtersContent}
           >
             {statusFilters.map((status) => (
-              <StatusFilter
+              <TouchableOpacity
                 key={status}
-                status={status}
-                selected={selectedStatus === status}
+                style={[styles.filterButton, selectedStatus === status && styles.selectedFilterButton]}
                 onPress={() => setSelectedStatus(status)}
-              />
+              >
+                <Text style={[styles.filterButtonText, selectedStatus === status && styles.selectedFilterButtonText]}>
+                  {status === 'All' ? 'All' : getStatusDisplayName(status)}
+                </Text>
+              </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
@@ -678,17 +622,17 @@ const MyOrdersScreen = ({ navigation }) => {
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FF6B9D" />
-          <Text style={styles.loadingText}>Loading orders...</Text>
+          <Text style={styles.loadingText}>Loading service orders...</Text>
         </View>
       ) : filteredOrders.length === 0 ? (
         orders.length === 0 ? renderEmptyOrders() : (
           <View style={styles.noFilterResultsContainer}>
             <Icon name="filter-outline" size={60} color="#FF6B9D" />
             <Text style={styles.noFilterResultsTitle}>
-              No {selectedTab !== 'All' ? selectedTab : ''} {getStatusDisplayName(selectedStatus)} Orders
+              No {getStatusDisplayName(selectedStatus)} Service Orders
             </Text>
             <Text style={styles.noFilterResultsSubtitle}>
-              You don't have any {selectedStatus !== 'All' ? selectedStatus.toLowerCase() : ''} {selectedTab.toLowerCase()} orders at the moment.
+              You don't have any {selectedStatus !== 'All' ? selectedStatus.toLowerCase() : ''} service orders at the moment.
             </Text>
           </View>
         )
@@ -709,7 +653,7 @@ const MyOrdersScreen = ({ navigation }) => {
           }
         />
       )}
-
+    {/* Footer here we can have the */}
       <Footer/>
     </SafeAreaView>
   );
@@ -754,60 +698,6 @@ const styles = StyleSheet.create({
     color: '#FF6B9D',
     fontWeight: '600',
   },
-  tabsContainer: {
-    backgroundColor: '#fff',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  tabsContent: {
-    paddingHorizontal: 20,
-    gap: 12,
-  },
-  tabButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 25,
-    backgroundColor: '#F8F8F8',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  selectedTabButton: {
-    backgroundColor: '#FFE8F0',
-    borderColor: '#FF6B9D',
-  },
-  tabContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  tabLabel: {
-    fontSize: 14,
-    color: '#7F8C8D',
-    fontWeight: '600',
-  },
-  selectedTabLabel: {
-    color: '#FF6B9D',
-  },
-  tabBadge: {
-    backgroundColor: '#E0E0E0',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    minWidth: 24,
-    alignItems: 'center',
-  },
-  selectedTabBadge: {
-    backgroundColor: '#FF6B9D',
-  },
-  tabBadgeText: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#7F8C8D',
-  },
-  selectedTabBadgeText: {
-    color: '#fff',
-  },
   filtersContainer: {
     backgroundColor: '#fff',
     paddingVertical: 12,
@@ -835,7 +725,7 @@ const styles = StyleSheet.create({
     color: '#7F8C8D',
     fontWeight: '600',
   },
-selectedFilterButtonText: {
+  selectedFilterButtonText: {
     color: '#fff',
   },
   listContainer: {
@@ -852,6 +742,10 @@ selectedFilterButtonText: {
     shadowRadius: 8,
     elevation: 4,
     overflow: 'hidden',
+  },
+  cancelledOrderCard: {
+    opacity: 0.6,
+    backgroundColor: '#F5F5F5',
   },
   orderHeader: {
     flexDirection: 'row',
@@ -874,23 +768,6 @@ selectedFilterButtonText: {
     fontSize: 13,
     color: '#7F8C8D',
   },
-  badgeContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-  },
-  typeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    gap: 4,
-  },
-  typeBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -902,6 +779,15 @@ selectedFilterButtonText: {
   statusText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  fadedText: {
+    opacity: 0.5,
+  },
+  fadedItem: {
+    opacity: 0.6,
+  },
+  fadedImage: {
+    opacity: 0.4,
   },
   otpContainer: {
     backgroundColor: '#FFF9FB',
@@ -969,24 +855,9 @@ selectedFilterButtonText: {
     borderBottomWidth: 1,
     borderBottomColor: '#F5F5F5',
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 16,
-    paddingBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2C3E50',
-  },
   serviceItemContainer: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  orderItems: {
-    padding: 16,
+    paddingVertical: 16,
   },
   orderItem: {
     flexDirection: 'row',
@@ -1131,13 +1002,6 @@ selectedFilterButtonText: {
     fontWeight: '600',
     color: '#2ECC71',
   },
-  moreItemsText: {
-    fontSize: 13,
-    color: '#FF6B9D',
-    fontWeight: '600',
-    textAlign: 'center',
-    marginTop: 8,
-  },
   orderFooter: {
     padding: 16,
     borderTopWidth: 1,
@@ -1161,20 +1025,59 @@ selectedFilterButtonText: {
   orderActions: {
     flexDirection: 'row',
     gap: 10,
+    marginTop: 12,
   },
   cancelButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: '#FFF5F5',
-    borderWidth: 1,
-    borderColor: '#E74C3C',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#FFF5F5',
+    borderWidth: 1.5,
+    borderColor: '#E74C3C',
   },
   cancelButtonText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#E74C3C',
+  },
+   actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  rateButton: {
+    backgroundColor: '#FFFBF0',
+    borderWidth: 1.5,
+    borderColor: '#FFD700',
+  },
+  rateButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFA500',
+  },
+    trackButton: {
+    backgroundColor: '#FF6B9D',
+  },
+  trackButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+    detailsButton: {
+    backgroundColor: '#FF6B9D',
+  },
+  detailsButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
   },
   viewDetailsButton: {
     flex: 1,
@@ -1236,25 +1139,15 @@ selectedFilterButtonText: {
     lineHeight: 20,
     marginBottom: 30,
   },
-  emptyButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
   shopNowButton: {
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 10,
     backgroundColor: '#FF6B9D',
   },
-  shopNowButtonPrimary: {
-    backgroundColor: '#FF6B9D',
-  },
   shopNowText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#fff',
-  },
-  shopNowTextSecondary: {
     color: '#fff',
   },
   noFilterResultsContainer: {
@@ -1279,5 +1172,4 @@ selectedFilterButtonText: {
   },
 });
 
-export default MyOrdersScreen;
-
+export default ServicesOrderScreen;

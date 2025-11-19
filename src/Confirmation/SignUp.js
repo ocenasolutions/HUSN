@@ -1,3 +1,4 @@
+// SignUp.js - Fixed version with proper role handling
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -24,9 +25,8 @@ const openPrivacyPolicy = () => {
   Linking.openURL('https://tobo-salon.vercel.app/privacy');
 };
 
-const SignUp = ({ navigation }) => {
-  // Form states
-  const [step, setStep] = useState(1); // 1 = signup form, 2 = OTP verification
+const SignUp = ({ navigation, route }) => {
+  const [step, setStep] = useState(1);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,13 +34,13 @@ const SignUp = ({ navigation }) => {
   const [otp, setOtp] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  
-  // Loading states
   const [loading, setLoading] = useState(false);
-  
-  // OTP timer states
   const [timer, setTimer] = useState(0);
   const [canResend, setCanResend] = useState(false);
+
+  // ✅ Get role from route params - 'professional' or undefined (which means regular user)
+  const role = route?.params?.role || 'user'; // Default to 'user' for customers
+  const isProfessional = role === 'professional';
 
   const { signupSendOTP, signupVerifyOTP } = useAuth();
 
@@ -100,13 +100,15 @@ const SignUp = ({ navigation }) => {
     
     setLoading(true);
     try {
+      // ✅ Pass the correct role to backend
       await signupSendOTP({
         name: name.trim(),
         email: email.toLowerCase(),
-        password
+        password,
+        role: isProfessional ? 'professional' : 'user' // Explicitly set role
       });
       setStep(2);
-      setTimer(600); // 10 minutes
+      setTimer(600);
       setCanResend(false);
       Alert.alert('Success', 'OTP sent to your email for verification');
     } catch (error) {
@@ -131,10 +133,8 @@ const SignUp = ({ navigation }) => {
     try {
       await signupVerifyOTP(email.toLowerCase(), otp);
       Alert.alert('Success', 'Account created successfully!');
-      // Navigation will be handled by AuthContext
     } catch (error) {
       Alert.alert('Error', error.message);
-    } finally {
       setLoading(false);
     }
   };
@@ -145,7 +145,8 @@ const SignUp = ({ navigation }) => {
       await signupSendOTP({
         name: name.trim(),
         email: email.toLowerCase(),
-        password
+        password,
+        role: isProfessional ? 'professional' : 'user'
       });
       setTimer(600);
       setCanResend(false);
@@ -158,10 +159,15 @@ const SignUp = ({ navigation }) => {
     }
   };
 
-  // Render signup form (step 1)
   const renderSignupForm = () => (
     <View style={styles.formContainer}>
-      {/* Name Input */}
+      {isProfessional && (
+        <View style={styles.roleIndicator}>
+          <Icon name="briefcase" size={24} color="#ED2B8C" />
+          <Text style={styles.roleText}>Creating Professional Account</Text>
+        </View>
+      )}
+
       <View style={styles.inputWrapper}>
         <TextInput
           style={styles.input}
@@ -175,7 +181,6 @@ const SignUp = ({ navigation }) => {
         />
       </View>
 
-      {/* Email Input */}
       <View style={styles.inputWrapper}>
         <TextInput
           style={styles.input}
@@ -190,7 +195,6 @@ const SignUp = ({ navigation }) => {
         />
       </View>
 
-      {/* Password Input */}
       <View style={styles.inputWrapper}>
         <TextInput
           style={[styles.input, { paddingRight: 50 }]}
@@ -215,7 +219,6 @@ const SignUp = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Confirm Password Input */}
       <View style={styles.inputWrapper}>
         <TextInput
           style={[styles.input, { paddingRight: 50 }]}
@@ -240,7 +243,6 @@ const SignUp = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Send OTP Button */}
       <TouchableOpacity
         style={[styles.signupButton, loading && styles.disabledButton]}
         onPress={handleSendOTP}
@@ -254,11 +256,10 @@ const SignUp = ({ navigation }) => {
         )}
       </TouchableOpacity>
 
-      {/* Login Link */}
       <View style={styles.loginContainer}>
         <Text style={styles.loginText}>Already have an account? </Text>
         <TouchableOpacity 
-          onPress={() => navigation.navigate('Login')}
+          onPress={() => navigation.navigate('Login', isProfessional ? { role: 'professional' } : {})}
           disabled={loading}
         >
           <Text style={[styles.loginLink, loading && styles.disabledText]}>
@@ -269,7 +270,6 @@ const SignUp = ({ navigation }) => {
     </View>
   );
 
-  // Render OTP verification form (step 2)
   const renderOTPForm = () => (
     <View style={styles.formContainer}>
       <View style={styles.otpIconContainer}>
@@ -313,7 +313,6 @@ const SignUp = ({ navigation }) => {
         )}
       </TouchableOpacity>
 
-      {/* Resend OTP */}
       <View style={styles.resendContainer}>
         <Text style={styles.resendText}>Didn't receive the code? </Text>
         <TouchableOpacity
@@ -329,7 +328,6 @@ const SignUp = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Change Email */}
       <TouchableOpacity 
         style={styles.changeEmailButton}
         onPress={() => {
@@ -350,7 +348,6 @@ const SignUp = ({ navigation }) => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
@@ -385,7 +382,6 @@ const SignUp = ({ navigation }) => {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Terms and Conditions - Only show on first step */}
       {step === 1 && (
         <View style={styles.termsContainer}>
           <View style={styles.termsRow}>
@@ -418,8 +414,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 20,
   },
-  
-  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -439,14 +433,25 @@ const styles = StyleSheet.create({
     color: '#333',
     marginTop: 50,
   },
-
-  // Form Container
   formContainer: {
     flex: 1,
     paddingTop: 40,
   },
-
-  // Input Styles
+  roleIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(237, 43, 140, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 30,
+  },
+  roleText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ED2B8C',
+    marginLeft: 10,
+  },
   inputWrapper: {
     marginBottom: 20,
     position: 'relative',
@@ -467,8 +472,6 @@ const styles = StyleSheet.create({
     top: 16,
     padding: 4,
   },
-
-  // Sign Up Button
   signupButton: {
     backgroundColor: '#ED2B8C',
     borderRadius: 12,
@@ -491,8 +494,6 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.7,
   },
-
-  // OTP Styles
   otpIconContainer: {
     width: 120,
     height: 120,
@@ -583,8 +584,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginLeft: 8,
   },
-
-  // Login Link
   loginContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -604,8 +603,6 @@ const styles = StyleSheet.create({
   disabledText: {
     opacity: 0.5,
   },
-
-  // Terms
   termsContainer: {
     alignItems: 'center',
     paddingHorizontal: 20,

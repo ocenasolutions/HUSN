@@ -6,17 +6,18 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  Alert,
   ActivityIndicator,
   SafeAreaView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import Toast from 'react-native-toast-message';
 import { API_URL } from '../../API/config';
 import Header from '../../Components/Header';
 import { useAuth } from '../../contexts/AuthContext'; 
 
 const ServiceDetails = ({ navigation, route }) => {
-  const { service } = route.params;
+  // Add safety check for route params
+  const service = route?.params?.service;
   const { user, tokens } = useAuth(); 
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -26,12 +27,32 @@ const ServiceDetails = ({ navigation, route }) => {
   const [showAllReviews, setShowAllReviews] = useState(false);
   const [selectedRatingFilter, setSelectedRatingFilter] = useState('all');
 
+  // Add early return if service is not available
   useEffect(() => {
+    if (!service) {
+      console.error('Service data is missing');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Service details not found',
+        position: 'top',
+        visibilityTime: 3000,
+        topOffset: 60,
+      });
+      // Navigate back after a short delay
+      setTimeout(() => {
+        navigation.goBack();
+      }, 1500);
+      return;
+    }
+    
     checkIfInCart();
     fetchReviews();
-  }, []);
+  }, [service]);
 
   const checkIfInCart = async () => {
+    if (!service?._id) return;
+    
     try {
       const response = await fetch(`${API_URL}/cart`, {
         headers: {
@@ -49,6 +70,8 @@ const ServiceDetails = ({ navigation, route }) => {
   };
 
   const fetchReviews = async () => {
+    if (!service?._id) return;
+    
     try {
       setReviewsLoading(true);
       const response = await fetch(`${API_URL}/reviews/service/${service._id}`);
@@ -69,9 +92,17 @@ const ServiceDetails = ({ navigation, route }) => {
 
   const handleAddToCart = async () => {
     if (!tokens?.accessToken) {
-      Alert.alert('Login Required', 'Please login to add items to cart');
+      Toast.show({
+        type: 'info',
+        text1: 'Login Required',
+        text2: 'Please login to add items to cart',
+        position: 'top',
+        visibilityTime: 3000,
+        topOffset: 60,
+      });
       return;
     }
+    
     try {
       setLoading(true);
       const cartData = {
@@ -89,28 +120,37 @@ const ServiceDetails = ({ navigation, route }) => {
         body: JSON.stringify(cartData),
       });
       const data = await response.json();
+      
       if (data.success) {
         setIsInCart(true);
-        Alert.alert(
-          '✓ Added to Cart!', 
-          `${service.name} has been added to your cart. You can schedule time and select professional during checkout.`,
-          [
-            {
-              text: 'Continue Shopping',
-              onPress: () => navigation.goBack()
-            },
-            {
-              text: 'View Cart',
-              onPress: () => navigation.navigate('ViewCart')
-            }
-          ]
-        );
+        Toast.show({
+          type: 'success',
+          text1: '✓ Added to Cart!',
+          text2: `${service.name} added. Schedule time during checkout.`,
+          position: 'bottom',
+          visibilityTime: 2000,
+          bottomOffset: 100,
+        });
       } else {
-        Alert.alert('Error', data.message || 'Failed to add to cart');
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: data.message || 'Failed to add to cart',
+          position: 'top',
+          visibilityTime: 3000,
+          topOffset: 60,
+        });
       }
     } catch (error) {
       console.error('Add to cart error:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Something went wrong. Please try again.',
+        position: 'top',
+        visibilityTime: 3000,
+        topOffset: 60,
+      });
     } finally {
       setLoading(false);
     }
@@ -119,7 +159,16 @@ const ServiceDetails = ({ navigation, route }) => {
   const handleViewCart = () => {
     navigation.navigate('ViewCart');
   };
-  const totalPrice = service.price * quantity;
+
+  const handleCartAction = () => {
+    if (isInCart) {
+      handleViewCart();
+    } else {
+      handleAddToCart();
+    }
+  };
+  
+  const totalPrice = service?.price ? service.price * quantity : 0;
 
   const renderStars = (rating) => {
     const stars = [];
@@ -156,6 +205,19 @@ const ServiceDetails = ({ navigation, route }) => {
 
   const filteredReviews = getFilteredReviews();
   const displayedReviews = getDisplayedReviews();
+
+  // Show loading or error state if service is not available
+  if (!service) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Header />
+        <View style={[styles.container, styles.centerContent]}>
+          <ActivityIndicator size="large" color="#FF6B9D" />
+          <Text style={styles.loadingText}>Loading service details...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -397,7 +459,7 @@ const ServiceDetails = ({ navigation, route }) => {
                 isInCart ? styles.viewCartButton : styles.addToCartButton,
                 loading && styles.disabledButton
               ]}
-              onPress={isInCart ? handleViewCart : handleAddToCart}
+              onPress={handleCartAction}
               disabled={loading}
             >
               {loading ? (
@@ -419,6 +481,9 @@ const ServiceDetails = ({ navigation, route }) => {
           </View>
         </View>
       </View>
+      
+      {/* Toast Component - Must be at root level */}
+      <Toast />
     </SafeAreaView>
   );
 };
@@ -427,6 +492,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#7F8C8D',
   },
   header: {
     flexDirection: 'row',
@@ -734,7 +808,6 @@ const styles = StyleSheet.create({
     color: '#7F8C8D',
     fontWeight: '500',
   },
-  // NEW STYLES FOR FILTER AND LOAD MORE
   filterContainer: {
     marginBottom: 16,
   },

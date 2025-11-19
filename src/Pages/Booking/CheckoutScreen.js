@@ -1,4 +1,4 @@
-// src/Pages/Booking/CheckoutScreen.js - Updated with filtered professionals
+// src/Pages/Booking/CheckoutScreen.js
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -15,10 +15,12 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import RazorpayCheckout from 'react-native-razorpay';
+import * as Location from 'expo-location';
 import { API_URL } from '../../API/config';
 import Header from '../../Components/Header';
 import { useAuth } from '../../contexts/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
+import MapLocationPicker from '../../components/MapLocationPicker';
 
 const CheckoutScreen = ({ navigation }) => {
   const { user, tokens } = useAuth();
@@ -37,6 +39,13 @@ const CheckoutScreen = ({ navigation }) => {
   const [savedAddresses, setSavedAddresses] = useState([]);
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('cod');
+  
+  // Live Location States
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [currentAddress, setCurrentAddress] = useState('');
+  const [gettingLocation, setGettingLocation] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
+  const [useCurrentLocation, setUseCurrentLocation] = useState(false);
   
   // Booking States
   const [selectedDate, setSelectedDate] = useState(null);
@@ -71,7 +80,6 @@ const CheckoutScreen = ({ navigation }) => {
         const items = servicesData.data.items || [];
         setServiceItems(items);
         
-        // Fetch professionals based on service categories
         if (items.length > 0) {
           await fetchRelevantProfessionals(items);
         }
@@ -93,7 +101,6 @@ const CheckoutScreen = ({ navigation }) => {
       }
 
       if (previousBookingsData.success) {
-        // Handle both array and object with orders property
         const bookings = Array.isArray(previousBookingsData.data) 
           ? previousBookingsData.data 
           : (previousBookingsData.data?.orders || []);
@@ -131,19 +138,15 @@ const CheckoutScreen = ({ navigation }) => {
 
   const fetchRelevantProfessionals = async (serviceItems) => {
     try {
-      // Extract service IDs
       const serviceIds = serviceItems
         .map(item => item.service?._id || item.serviceId)
         .filter(Boolean)
         .join(',');
 
       if (!serviceIds) {
-        console.log('No service IDs found');
         setRelevantProfessionals([]);
         return;
       }
-
-      console.log('Fetching professionals for services:', serviceIds);
 
       const response = await fetch(
         `${API_URL}/professionals/by-services?serviceIds=${serviceIds}`,
@@ -151,25 +154,107 @@ const CheckoutScreen = ({ navigation }) => {
       );
 
       const data = await response.json();
-      console.log('Professionals API response:', data);
 
       if (data.success) {
         setRelevantProfessionals(data.data || []);
-        console.log('✅ Relevant professionals loaded:', data.data?.length || 0);
-        console.log('📋 For categories:', data.categories);
-        
-        if (!data.data || data.data.length === 0) {
-          console.warn('⚠️ No professionals found for categories:', data.categories);
-          console.log('💡 Tip: Create professionals with these specializations:', data.categories);
-        }
       } else {
-        console.error('❌ Professionals API error:', data.message);
         setRelevantProfessionals([]);
       }
     } catch (error) {
-      console.error('❌ Fetch relevant professionals error:', error);
+      console.error('Fetch relevant professionals error:', error);
       setRelevantProfessionals([]);
     }
+  };
+
+  // Live Location Functions
+  const getCurrentLocation = async () => {
+    try {
+      setGettingLocation(true);
+      
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location permission is required for service delivery');
+        setGettingLocation(false);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High
+      });
+
+      const { latitude, longitude } = location.coords;
+      setCurrentLocation({ latitude, longitude });
+
+      const addresses = await Location.reverseGeocodeAsync({ latitude, longitude });
+      
+      if (addresses.length > 0) {
+        const addr = addresses[0];
+        const addressString = [
+          addr.name,
+          addr.street,
+          addr.city,
+          addr.region,
+          addr.postalCode
+        ].filter(Boolean).join(', ');
+        
+        setCurrentAddress(addressString);
+        
+        // Create a temporary address object from live location
+        const liveAddress = {
+          _id: 'live-location',
+          fullName: user?.name || 'User',
+          phoneNumber: user?.phoneNumber || '',
+          address: addressString,
+          city: addr.city || '',
+          state: addr.region || '',
+          pincode: addr.postalCode || '',
+          addressType: 'Current Location',
+          isLiveLocation: true,
+          coordinates: { latitude, longitude }
+        };
+        
+        setSelectedAddress(liveAddress);
+        setUseCurrentLocation(true);
+      }
+
+      setGettingLocation(false);
+    } catch (error) {
+      console.error('Get location error:', error);
+      Alert.alert('Error', 'Failed to get current location');
+      setGettingLocation(false);
+    }
+  };
+
+  const handleLocationSelect = (selectedLocation) => {
+    setCurrentLocation({
+      latitude: selectedLocation.latitude,
+      longitude: selectedLocation.longitude
+    });
+    setCurrentAddress(selectedLocation.address);
+    
+    // Create address from map selection
+    const mapAddress = {
+      _id: 'map-location',
+      fullName: user?.name || 'User',
+      phoneNumber: user?.phoneNumber || '',
+      address: selectedLocation.address,
+      city: selectedLocation.city || '',
+      state: selectedLocation.state || '',
+      pincode: selectedLocation.pincode || '',
+      addressType: 'Selected Location',
+      isLiveLocation: true,
+      coordinates: { 
+        latitude: selectedLocation.latitude, 
+        longitude: selectedLocation.longitude 
+      }
+    };
+    
+    setSelectedAddress(mapAddress);
+    setUseCurrentLocation(true);
+  };
+
+  const openMapPicker = () => {
+    setShowMapPicker(true);
   };
 
   useFocusEffect(
@@ -366,12 +451,19 @@ const CheckoutScreen = ({ navigation }) => {
         professionalName: item.professionalName
       }));
 
+      // Build address object - include coordinates if live location
       const mappedAddress = {
         type: selectedAddress.addressType || selectedAddress.type || 'Home',
         street: selectedAddress.address || selectedAddress.street || '',
         city: selectedAddress.city || '',
         state: selectedAddress.state || '',
-        zipCode: selectedAddress.pincode || selectedAddress.zipCode || ''
+        zipCode: selectedAddress.pincode || selectedAddress.zipCode || '',
+        ...(selectedAddress.isLiveLocation && selectedAddress.coordinates && {
+          coordinates: {
+            latitude: selectedAddress.coordinates.latitude,
+            longitude: selectedAddress.coordinates.longitude
+          }
+        })
       };
 
       const orderData = {
@@ -477,11 +569,133 @@ const CheckoutScreen = ({ navigation }) => {
     switch (type) {
       case 'Home': return 'home';
       case 'Work': return 'business';
+      case 'Current Location': return 'location';
+      case 'Selected Location': return 'pin';
       default: return 'location';
     }
   };
 
   const renderDeliveryAddress = () => {
+    // Show live location option for services
+    if (serviceItems.length > 0) {
+      return (
+        <View>
+          {/* Live Location Option */}
+          <View style={styles.liveLocationSection}>
+            <TouchableOpacity
+              style={[
+                styles.liveLocationCard,
+                useCurrentLocation && styles.liveLocationCardActive
+              ]}
+              onPress={getCurrentLocation}
+              disabled={gettingLocation}
+            >
+              <View style={styles.liveLocationHeader}>
+                <Icon 
+                  name="navigate-circle" 
+                  size={24} 
+                  color={useCurrentLocation ? "#FF1493" : "#666"} 
+                />
+                <Text style={[
+                  styles.liveLocationTitle,
+                  useCurrentLocation && styles.liveLocationTitleActive
+                ]}>
+                  Use Current Location
+                </Text>
+              </View>
+              {gettingLocation && (
+                <ActivityIndicator size="small" color="#FF1493" style={styles.locationLoader} />
+              )}
+              {currentAddress && useCurrentLocation && (
+                <Text style={styles.currentAddressText}>{currentAddress}</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.mapPickerButton}
+              onPress={openMapPicker}
+            >
+              <Icon name="map" size={20} color="#FF1493" />
+              <Text style={styles.mapPickerButtonText}>Pick from Map</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Saved Addresses */}
+          {savedAddresses.length > 0 && (
+            <View style={styles.savedAddressesSection}>
+              <Text style={styles.orText}>OR</Text>
+              <Text style={styles.savedAddressesTitle}>Saved Addresses</Text>
+              
+              {selectedAddress && !selectedAddress.isLiveLocation && (
+                <View style={styles.addressCard}>
+                  <View style={styles.addressHeader}>
+                    <View style={styles.addressTypeContainer}>
+                      <Icon 
+                        name={getAddressTypeIcon(selectedAddress.addressType || selectedAddress.type)} 
+                        size={16} 
+                        color="#FF1493" 
+                      />
+                      <Text style={styles.addressType}>
+                        {selectedAddress.addressType || selectedAddress.type}
+                      </Text>
+                      {selectedAddress.isDefault && (
+                        <View style={styles.defaultBadge}>
+                          <Text style={styles.defaultBadgeText}>DEFAULT</Text>
+                        </View>
+                      )}
+                    </View>
+                    <TouchableOpacity onPress={navigateToAddresses}>
+                      <Text style={styles.changeText}>Change</Text>
+                    </TouchableOpacity>
+                  </View>
+                  
+                  <View style={styles.addressDetails}>
+                    <Text style={styles.fullName}>
+                      {selectedAddress.fullName || user?.name || 'User'}
+                    </Text>
+                    <Text style={styles.phoneNumber}>
+                      {selectedAddress.phoneNumber || user?.phoneNumber || ''}
+                    </Text>
+                    <Text style={styles.addressText}>
+                      {selectedAddress.address || selectedAddress.street}
+                      {selectedAddress.landmark && `, ${selectedAddress.landmark}`}
+                    </Text>
+                    <Text style={styles.addressText}>
+                      {selectedAddress.city}, {selectedAddress.state} - {selectedAddress.pincode || selectedAddress.zipCode}
+                    </Text>
+                  </View>
+                </View>
+              )}
+              
+              <TouchableOpacity 
+                style={styles.viewAllAddressesButton}
+                onPress={navigateToAddresses}
+              >
+                <Text style={styles.viewAllAddressesText}>View All Addresses</Text>
+                <Icon name="chevron-forward" size={16} color="#FF1493" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {savedAddresses.length === 0 && !useCurrentLocation && (
+            <View style={styles.noAddressContainer}>
+              <Icon name="location-outline" size={32} color="#FF1493" />
+              <Text style={styles.noAddressTitle}>No Saved Addresses</Text>
+              <Text style={styles.noAddressSubtitle}>Use live location or add an address</Text>
+              <TouchableOpacity 
+                style={styles.addAddressButton}
+                onPress={navigateToAddresses}
+              >
+                <Icon name="add" size={16} color="#fff" />
+                <Text style={styles.addAddressText}>Add Address</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      );
+    }
+
+    // Regular address selection for products
     if (savedAddresses.length === 0) {
       return (
         <View style={styles.noAddressContainer}>
@@ -690,7 +904,9 @@ const CheckoutScreen = ({ navigation }) => {
       >
         {/* Delivery Address Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Delivery Address</Text>
+          <Text style={styles.sectionTitle}>
+            {serviceItems.length > 0 ? 'Service Location' : 'Delivery Address'}
+          </Text>
           {renderDeliveryAddress()}
         </View>
 
@@ -857,7 +1073,7 @@ const CheckoutScreen = ({ navigation }) => {
         </SafeAreaView>
       </Modal>
 
-      {/* Booking Modal - UPDATED WITH FILTERED PROFESSIONALS */}
+      {/* Booking Modal */}
       <Modal
         visible={showBookingModal}
         animationType="slide"
@@ -917,10 +1133,9 @@ const CheckoutScreen = ({ navigation }) => {
               })}
             </View>
 
-            {/* Professional Selection - FILTERED BY SERVICE CATEGORY */}
+            {/* Professional Selection */}
             <Text style={styles.modalSectionTitle}>Select Professional</Text>
             
-            {/* Show message if no professionals available */}
             {relevantProfessionals.length === 0 && previousProfessionals.length === 0 && (
               <View style={styles.noProfessionalsContainer}>
                 <Icon name="people-outline" size={48} color="#CCC" />
@@ -933,12 +1148,10 @@ const CheckoutScreen = ({ navigation }) => {
               </View>
             )}
 
-            {/* Previously Booked Professionals (filtered) */}
             {previousProfessionals.length > 0 && (
               <>
                 <Text style={styles.professionalSubtitle}>Previously Booked</Text>
                 {previousProfessionals.map((prof, index) => {
-                  // Check if this previous professional is in the relevant list
                   const isRelevant = relevantProfessionals.some(rp => rp._id === prof.id);
                   if (!isRelevant) return null;
                   
@@ -966,7 +1179,6 @@ const CheckoutScreen = ({ navigation }) => {
               </>
             )}
 
-            {/* Available Relevant Professionals */}
             {relevantProfessionals.length > 0 && (
               <>
                 <Text style={styles.professionalSubtitle}>
@@ -1014,7 +1226,6 @@ const CheckoutScreen = ({ navigation }) => {
               </>
             )}
 
-            {/* Auto-assign option - always available */}
             <TouchableOpacity
               style={[
                 styles.professionalCard, 
@@ -1053,6 +1264,15 @@ const CheckoutScreen = ({ navigation }) => {
           </View>
         </SafeAreaView>
       </Modal>
+
+      {/* Map Location Picker Modal */}
+      <MapLocationPicker
+        visible={showMapPicker}
+        onClose={() => setShowMapPicker(false)}
+        onLocationSelect={handleLocationSelect}
+        initialLocation={currentLocation}
+        title="Select Service Location"
+      />
     </SafeAreaView>
   );
 };
@@ -1140,6 +1360,95 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#000',
     marginBottom: 16,
+  },
+  // Live Location Styles
+  liveLocationSection: {
+    marginBottom: 16,
+  },
+  liveLocationCard: {
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  liveLocationCardActive: {
+    borderColor: '#FF1493',
+    backgroundColor: '#FFF5F8',
+  },
+  liveLocationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  liveLocationTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+    marginLeft: 12,
+  },
+  liveLocationTitleActive: {
+    color: '#FF1493',
+  },
+  locationLoader: {
+    marginTop: 12,
+  },
+  currentAddressText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 12,
+    lineHeight: 20,
+  },
+  mapPickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FF1493',
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: '#FFF5F8',
+  },
+  mapPickerButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FF1493',
+    marginLeft: 8,
+  },
+  savedAddressesSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  orText: {
+    textAlign: 'center',
+    color: '#999',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  savedAddressesTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 12,
+  },
+  viewAllAddressesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#FF1493',
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  viewAllAddressesText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FF1493',
+    marginRight: 6,
   },
   noAddressContainer: {
     alignItems: 'center',
@@ -1460,229 +1769,222 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF5F8',
   },
   paymentMethodInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  paymentMethodTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-  },
-  paymentMethodDesc: {
-    fontSize: 14,
-    color: '#666',
-  },
-  modalSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginTop: 20,
-    marginBottom: 12,
-  },
-  dateScroll: {
-    marginBottom: 8,
-  },
-  dateCard: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 12,
-    marginRight: 12,
-    backgroundColor: '#FFFFFF',
-    minWidth: 70,
-  },
-  selectedDateCard: {
-    borderColor: '#FF1493',
-    backgroundColor: '#FF1493',
-  },
-  dateDay: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
-  },
-  dateNumber: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 2,
-  },
-  dateMonth: {
-    fontSize: 12,
-    color: '#666',
-  },
-  selectedDateText: {
-    color: '#FFFFFF',
-  },
-  timeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 8,
-  },
-  timeSlot: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    marginRight: 8,
-    marginBottom: 8,
-    backgroundColor: '#FFFFFF',
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  selectedTimeSlot: {
-    borderColor: '#FF1493',
-    backgroundColor: '#FF1493',
-  },
-  timeText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#000',
-  },
-  selectedTimeText: {
-    color: '#FFFFFF',
-  },
-  noProfessionalsContainer: {
-    alignItems: 'center',
-    paddingVertical: 30,
-    paddingHorizontal: 20,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  noProfessionalsText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-    marginTop: 12,
-    textAlign: 'center',
-  },
-  noProfessionalsSubtext: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  professionalSubtitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#666',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  professionalCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 12,
-    marginBottom: 12,
-    backgroundColor: '#FFFFFF',
-  },
-  selectedProfessionalCard: {
-    borderColor: '#FF1493',
-    backgroundColor: '#FFF5F8',
-  },
-  professionalInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  professionalName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-  },
-  selectedProfessionalText: {
-    color: '#FF1493',
-  },
-  professionalRole: {
-    fontSize: 13,
-    color: '#666',
-  },
-  specializationsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 4,
-    gap: 4,
-  },
-  specializationBadge: {
-    backgroundColor: '#E8F5E9',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  specializationText: {
-    fontSize: 10,
-    color: '#4CAF50',
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    gap: 4,
-  },
-  ratingText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFB800',
-  },
-  bookingsText: {
-    fontSize: 11,
-    color: '#999',
-  },
-  previousBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E8F5E9',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-  previousBadgeText: {
-    fontSize: 11,
-    color: '#10B981',
-    marginLeft: 4,
-    fontWeight: '500',
-  },
-  autoAssignCard: {
-    borderStyle: 'dashed',
-    borderColor: '#FF1493',
-    backgroundColor: '#FFF5F8',
-  },
-  modalFooter: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-    backgroundColor: '#FFFFFF',
-  },
-  saveButton: {
-    backgroundColor: '#FF1493',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#FF1493',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  flex: 1,
+  marginLeft: 12,
+},
+paymentMethodTitle: {
+  fontSize: 16,
+  fontWeight: '600',
+  color: '#000',
+  marginBottom: 4,
+},
+paymentMethodDesc: {
+  fontSize: 13,
+  color: '#666',
+},
+modalSectionTitle: {
+  fontSize: 16,
+  fontWeight: '600',
+  color: '#000',
+  marginTop: 20,
+  marginBottom: 12,
+},
+dateScroll: {
+  marginBottom: 20,
+},
+dateCard: {
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 12,
+  paddingHorizontal: 16,
+  marginRight: 12,
+  borderWidth: 1,
+  borderColor: '#E0E0E0',
+  borderRadius: 12,
+  backgroundColor: '#FFFFFF',
+  minWidth: 70,
+},
+selectedDateCard: {
+  borderColor: '#FF1493',
+  backgroundColor: '#FFF5F8',
+},
+dateDay: {
+  fontSize: 12,
+  color: '#666',
+  marginBottom: 4,
+},
+dateNumber: {
+  fontSize: 20,
+  fontWeight: '700',
+  color: '#000',
+  marginBottom: 2,
+},
+dateMonth: {
+  fontSize: 11,
+  color: '#666',
+},
+selectedDateText: {
+  color: '#FF1493',
+},
+timeGrid: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  marginBottom: 20,
+},
+timeSlot: {
+  paddingVertical: 10,
+  paddingHorizontal: 16,
+  borderWidth: 1,
+  borderColor: '#E0E0E0',
+  borderRadius: 8,
+  marginRight: 8,
+  marginBottom: 8,
+  backgroundColor: '#FFFFFF',
+},
+selectedTimeSlot: {
+  borderColor: '#FF1493',
+  backgroundColor: '#FFF5F8',
+},
+timeText: {
+  fontSize: 14,
+  color: '#666',
+  fontWeight: '500',
+},
+selectedTimeText: {
+  color: '#FF1493',
+  fontWeight: '600',
+},
+noProfessionalsContainer: {
+  alignItems: 'center',
+  paddingVertical: 40,
+  paddingHorizontal: 20,
+},
+noProfessionalsText: {
+  fontSize: 16,
+  fontWeight: '600',
+  color: '#666',
+  textAlign: 'center',
+  marginTop: 16,
+  marginBottom: 8,
+},
+noProfessionalsSubtext: {
+  fontSize: 14,
+  color: '#999',
+  textAlign: 'center',
+},
+professionalSubtitle: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#666',
+  marginBottom: 12,
+  marginTop: 8,
+},
+professionalCard: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  padding: 12,
+  borderWidth: 1,
+  borderColor: '#E0E0E0',
+  borderRadius: 12,
+  marginBottom: 12,
+  backgroundColor: '#FFFFFF',
+},
+selectedProfessionalCard: {
+  borderColor: '#FF1493',
+  backgroundColor: '#FFF5F8',
+},
+autoAssignCard: {
+  borderStyle: 'dashed',
+  borderWidth: 2,
+  borderColor: '#FF1493',
+},
+professionalInfo: {
+  flex: 1,
+  marginLeft: 12,
+},
+professionalName: {
+  fontSize: 15,
+  fontWeight: '600',
+  color: '#000',
+  marginBottom: 4,
+},
+selectedProfessionalText: {
+  color: '#FF1493',
+},
+professionalRole: {
+  fontSize: 13,
+  color: '#666',
+  marginTop: 2,
+},
+previousBadge: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#E8F5E9',
+  paddingHorizontal: 8,
+  paddingVertical: 4,
+  borderRadius: 12,
+  alignSelf: 'flex-start',
+  marginTop: 4,
+},
+previousBadgeText: {
+  fontSize: 11,
+  color: '#10B981',
+  marginLeft: 4,
+  fontWeight: '500',
+},
+specializationsContainer: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  marginTop: 6,
+},
+specializationBadge: {
+  backgroundColor: '#F3E8FF',
+  paddingHorizontal: 8,
+  paddingVertical: 3,
+  borderRadius: 10,
+  marginRight: 6,
+  marginBottom: 4,
+},
+specializationText: {
+  fontSize: 11,
+  color: '#9333EA',
+  fontWeight: '500',
+},
+ratingContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginTop: 6,
+},
+ratingText: {
+  fontSize: 12,
+  fontWeight: '600',
+  color: '#000',
+  marginLeft: 4,
+},
+bookingsText: {
+  fontSize: 11,
+  color: '#666',
+  marginLeft: 4,
+},
+modalFooter: {
+  paddingHorizontal: 16,
+  paddingVertical: 12,
+  borderTopWidth: 1,
+  borderTopColor: '#F0F0F0',
+  backgroundColor: '#FFFFFF',
+},
+saveButton: {
+  backgroundColor: '#FF1493',
+  paddingVertical: 16,
+  borderRadius: 12,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+saveButtonText: {
+  color: '#fff',
+  fontSize: 16,
+  fontWeight: '600',
+},
 });
 
 export default CheckoutScreen;

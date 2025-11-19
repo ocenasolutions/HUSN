@@ -1,3 +1,4 @@
+// Login.js - Fixed version for regular users
 import React, { useState } from 'react';
 import {
   View,
@@ -24,6 +25,7 @@ const openPrivacyPolicy = () => {
   Linking.openURL('https://tobo-salon.vercel.app/privacy');
 };
 
+// ✅ This is for REGULAR USERS (customers)
 const Login = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -45,7 +47,12 @@ const Login = ({ navigation }) => {
 
     setLoading(true);
     try {
-      await login({ email: email.toLowerCase(), password });
+      // ✅ Pass requestedRole as 'user' for regular customers
+      await login({ 
+        email: email.toLowerCase(), 
+        password,
+        requestedRole: 'user' // Regular user login
+      });
     } catch (error) {
       Alert.alert('Login Failed', error.message);
     } finally {
@@ -75,13 +82,11 @@ const Login = ({ navigation }) => {
           contentContainerStyle={styles.scrollContainer}
           showsVerticalScrollIndicator={false}
         >
-          {/* Form Container */}
           <View style={styles.formContainer}>
-            {/* Email Input */}
             <View style={styles.inputWrapper}>
               <TextInput
                 style={styles.input}
-                placeholder="Email or Phone"
+                placeholder="Email"
                 placeholderTextColor="#999"
                 value={email}
                 onChangeText={setEmail}
@@ -92,7 +97,6 @@ const Login = ({ navigation }) => {
               />
             </View>
             
-            {/* Password Input */}
             <View style={styles.inputWrapper}>
               <TextInput
                 style={[styles.input, { paddingRight: 50 }]}
@@ -117,7 +121,6 @@ const Login = ({ navigation }) => {
               </TouchableOpacity>
             </View>
             
-            {/* Forgot Password */}
             <TouchableOpacity 
               style={styles.forgotPassword}
               onPress={() => navigation.navigate('ForgetPassword')}
@@ -126,7 +129,6 @@ const Login = ({ navigation }) => {
               <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
             </TouchableOpacity>
             
-            {/* Login Button */}
             <TouchableOpacity
               style={[styles.loginButton, loading && styles.disabledButton]}
               onPress={handleLogin}
@@ -140,7 +142,6 @@ const Login = ({ navigation }) => {
               )}
             </TouchableOpacity>
             
-            {/* Sign Up Link */}
             <View style={styles.signupContainer}>
               <Text style={styles.signupText}>Don't have an account? </Text>
               <TouchableOpacity 
@@ -156,7 +157,182 @@ const Login = ({ navigation }) => {
         </ScrollView>
       </KeyboardAvoidingView>
       
-      {/* Terms and Conditions */}
+      <View style={styles.termsContainer}>
+        <View style={styles.termsRow}>
+          <Text style={styles.termsText}>By signing in, you agree to our </Text>
+        </View>
+        <View style={styles.termsLinksRow}>
+          <TouchableOpacity onPress={openTermsAndConditions}>
+            <Text style={styles.termsLink}>Terms & Conditions</Text>
+          </TouchableOpacity>
+          <Text style={styles.termsText}> and </Text>
+          <TouchableOpacity onPress={openPrivacyPolicy}>
+            <Text style={styles.termsLink}>Privacy Policy</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+// Professional Login Component - Keep this separate
+export const ProfessionalLogin = ({ navigation, route }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const role = route?.params?.role || 'professional';
+
+  const { login } = useAuth();
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (!email.includes('@')) {
+      Alert.alert('Error', 'Please enter a valid email');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // ✅ Pass requestedRole as 'professional' for professionals
+      await login({ 
+        email: email.toLowerCase(), 
+        password,
+        requestedRole: 'professional' // Professional login
+      });
+    } catch (error) {
+      if (role === 'admin' && (error.message.includes('Invalid') || error.message.includes('not found') || error.message.includes('admin'))) {
+        Alert.alert(
+          'Admin Access Denied',
+          'You are not authorized as an admin. If you believe this is an error, please contact support.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Login Failed', error.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Icon name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>
+          {role === 'admin' ? 'Admin Login' : 'Professional Login'}
+        </Text>
+        <View style={{ width: 24 }} />
+      </View>
+      
+      <KeyboardAvoidingView 
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView 
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.formContainer}>
+            <View style={styles.roleIndicator}>
+              <Icon 
+                name={role === 'admin' ? 'shield-checkmark' : 'briefcase'} 
+                size={24} 
+                color="#ED2B8C" 
+              />
+              <Text style={styles.roleText}>
+                Logging in as {role === 'admin' ? 'Admin' : 'Professional'}
+              </Text>
+            </View>
+
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor="#999"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!loading}
+              />
+            </View>
+            
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={[styles.input, { paddingRight: 50 }]}
+                placeholder="Password"
+                placeholderTextColor="#999"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                editable={!loading}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeIcon}
+                disabled={loading}
+              >
+                <Icon 
+                  name={showPassword ? 'eye-outline' : 'eye-off-outline'} 
+                  size={20} 
+                  color="#999" 
+                />
+              </TouchableOpacity>
+            </View>
+            
+            {role !== 'admin' && (
+              <TouchableOpacity 
+                style={styles.forgotPassword}
+                onPress={() => navigation.navigate('ForgetPassword')}
+                disabled={loading}
+              >
+                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              </TouchableOpacity>
+            )}
+            
+            <TouchableOpacity
+              style={[styles.loginButton, loading && styles.disabledButton]}
+              onPress={handleLogin}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.loginButtonText}>Login</Text>
+              )}
+            </TouchableOpacity>
+            
+            {role !== 'admin' && (
+              <View style={styles.signupContainer}>
+                <Text style={styles.signupText}>Don't have an account? </Text>
+                <TouchableOpacity 
+                  onPress={() => navigation.navigate('SignUp', { role: 'professional' })}
+                  disabled={loading}
+                >
+                  <Text style={[styles.signupLink, loading && styles.disabledText]}>
+                    Sign Up
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+      
       <View style={styles.termsContainer}>
         <View style={styles.termsRow}>
           <Text style={styles.termsText}>By signing in, you agree to our </Text>
@@ -187,8 +363,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 20,
   },
-  
-  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -208,14 +382,25 @@ const styles = StyleSheet.create({
     color: '#333',
     marginTop: 50,
   },
-
-  // Form Container
   formContainer: {
     flex: 1,
     paddingTop: 40,
   },
-
-  // Input Styles
+  roleIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(237, 43, 140, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 30,
+  },
+  roleText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ED2B8C',
+    marginLeft: 10,
+  },
   inputWrapper: {
     marginBottom: 20,
     position: 'relative',
@@ -236,8 +421,6 @@ const styles = StyleSheet.create({
     top: 16,
     padding: 4,
   },
-
-  // Forgot Password
   forgotPassword: {
     alignSelf: 'flex-end',
     marginBottom: 30,
@@ -247,8 +430,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-
-  // Login Button
   loginButton: {
     backgroundColor: '#ED2B8C',
     borderRadius: 12,
@@ -270,8 +451,6 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.7,
   },
-
-  // Sign Up Link
   signupContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -291,8 +470,6 @@ const styles = StyleSheet.create({
   disabledText: {
     opacity: 0.5,
   },
-
-  // Terms
   termsContainer: {
     alignItems: 'center',
     paddingHorizontal: 20,

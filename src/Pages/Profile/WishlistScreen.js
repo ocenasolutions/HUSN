@@ -9,16 +9,26 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Dimensions,
+  Animated,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../../contexts/AuthContext';
 import Header  from '../../Components/Header';
 import { API_URL } from '../../API/config';
 
+const { width } = Dimensions.get('window');
+const ITEM_WIDTH = (width - 60) / 2; 
+
 const WishlistScreen = ({ navigation }) => {
   const { user, tokens } = useAuth();
   const [wishlistItems, setWishlistItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [addingToCart, setAddingToCart] = useState(null);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const toastAnim = useState(new Animated.Value(0))[0];
+  const [notificationRequests, setNotificationRequests] = useState(new Set());
 
   const getAuthHeaders = () => {
     const token = tokens?.accessToken || user?.token;
@@ -28,6 +38,27 @@ const WishlistScreen = ({ navigation }) => {
     };
   };
 
+  const showToast = (message) => {
+    setToastMessage(message);
+    setToastVisible(true);
+    
+    Animated.sequence([
+      Animated.timing(toastAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.delay(2000),
+      Animated.timing(toastAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setToastVisible(false);
+    });
+  };
+
   const fetchWishlistItems = async () => {
     try {
       setLoading(true);
@@ -35,6 +66,8 @@ const WishlistScreen = ({ navigation }) => {
         headers: getAuthHeaders()
       });
       const data = await response.json();
+      
+      console.log('Wishlist response:', JSON.stringify(data, null, 2));
       
       if (data.success) {
         setWishlistItems(data.data || []);
@@ -49,128 +82,254 @@ const WishlistScreen = ({ navigation }) => {
     }
   };
 
-  useEffect(() => {
-    fetchWishlistItems();
-  }, []);
+const fetchNotificationRequests = async () => {
+  try {
+    const response = await fetch(`${API_URL}/stock-notifications/my-requests`, {
+      headers: getAuthHeaders()
+    });
+    const data = await response.json();
+    
+    if (data.success) {
+      const requestedProductIds = new Set(
+        data.data.map(req => req.product._id || req.product)
+      );
+      setNotificationRequests(requestedProductIds);
+    }
+  } catch (error) {
+    console.error('Error fetching notification requests:', error);
+  }
+};
 
-  const removeFromWishlist = async (productId) => {
-    Alert.alert(
-      'Remove from Wishlist',
-      'Are you sure you want to remove this item from your wishlist?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const response = await fetch(`${API_URL}/wishlist/${productId}`, {
-                method: 'DELETE',
-                headers: getAuthHeaders()
-              });
-              
-              if (response.ok) {
-                setWishlistItems(prev => prev.filter(item => item.product._id !== productId));
-                Alert.alert('Success', 'Item removed from wishlist');
-              } else {
-                Alert.alert('Error', 'Failed to remove item');
-              }
-            } catch (error) {
-              console.error('Error removing from wishlist:', error);
-              Alert.alert('Error', 'Failed to remove item');
-            }
-          }
-        }
-      ]
-    );
-  };
+// Update useEffect to also fetch notification requests:
+useEffect(() => {
+  fetchWishlistItems();
+  fetchNotificationRequests();
+}, []);
 
-  const moveToCart = async (item) => {
+const handleNotifyMe = async (item) => {
+  const productId = item.product?._id || item.product?.id;
+  
+  if (!productId) {
+    Alert.alert('Error', 'Invalid product information');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_URL}/stock-notifications/request`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ productId })
+    });
+
+    const data = await response.json();
+    
+    if (data.success) {
+      setNotificationRequests(prev => new Set([...prev, productId]));
+      showToast('You will be notified when this item is back in stock!');
+    } else {
+      Alert.alert('Error', data.message || 'Failed to set notification');
+    }
+  } catch (error) {
+    console.error('Error setting notification:', error);
+    Alert.alert('Error', 'Failed to set notification. Please try again.');
+  }
+};
+
+  const removeFromWishlist = async (item) => {
     try {
-      const response = await fetch(`${API_URL}/wishlist/move-to-cart/${item.product._id}`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ quantity: 1 })
+      const productId = item.product?.id || item.product?._id;
+      
+      if (!productId) {
+        console.error('No valid product ID found');
+        Alert.alert('Error', 'Invalid product information');
+        return;
+      }
+      
+      console.log('Removing product with ID:', productId);
+      
+      const previousItems = [...wishlistItems];
+      setWishlistItems(prev => prev.filter(wishItem => 
+        (wishItem.product?.id || wishItem.product?._id) !== productId
+      ));
+      
+      const url = `${API_URL}/wishlist/${productId}`;
+      console.log('DELETE URL:', url);
+      
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
       
+      console.log('Response status:', response.status);
+      
       const data = await response.json();
-      if (data.success) {
-        setWishlistItems(prev => prev.filter(wishItem => wishItem.product._id !== item.product._id));
-        Alert.alert('Success', 'Item moved to cart successfully');
-      } else {
-        Alert.alert('Error', data.message || 'Failed to move item to cart');
+      console.log('Response data:', data);
+      
+      if (!response.ok) {
+        setWishlistItems(previousItems);
+        Alert.alert('Error', data.message || 'Failed to remove item from wishlist');
+        console.error('Remove failed:', data);
       }
     } catch (error) {
-      console.error('Error moving to cart:', error);
-      Alert.alert('Error', 'Failed to move item to cart');
+      console.error('Error removing from wishlist:', error);
+      fetchWishlistItems();
+      Alert.alert('Error', 'Failed to remove item from wishlist. Please try again.');
     }
   };
 
-  const renderWishlistItem = ({ item }) => (
-    <View style={styles.wishlistItem}>
+  const moveToCart = async (item) => {
+    if (!user) {
+      Alert.alert('Login Required', 'Please login to add items to cart');
+      return;
+    }
+
+    const productId = item.product?._id || item.product?.id;
+    
+    if (!productId) {
+      Alert.alert('Error', 'Invalid product information');
+      return;
+    }
+
+    // Check stock status
+    if (item.product?.stock === 0 || item.product?.stockStatus === 'out-of-stock') {
+      Alert.alert('Out of Stock', 'This product is currently out of stock');
+      return;
+    }
+
+    try {
+      setAddingToCart(productId);
+
+      // Add to cart using the same API as ProductDetails screen
+      const response = await fetch(`${API_URL}/product-cart/add`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          productId: productId,
+          quantity: 1
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        // Remove from wishlist after successfully adding to cart
+        setWishlistItems(prev => prev.filter(wishItem => 
+          (wishItem.product?._id || wishItem.product?.id) !== productId
+        ));
+        
+        showToast('Added to Cart');
+      } else {
+        Alert.alert('Error', data.message || 'Failed to add to cart');
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      Alert.alert('Error', 'Failed to add to cart. Please try again.');
+    } finally {
+      setAddingToCart(null);
+    }
+  };
+
+ const renderWishlistItem = ({ item }) => {
+  const productId = item.product?._id || item.product?.id;
+  const isAddingThisItem = addingToCart === productId;
+  const isOutOfStock = item.product?.stock === 0 || item.product?.stockStatus === 'out-of-stock';
+  const hasNotificationRequest = notificationRequests.has(productId);
+  
+  return (
+    <View style={styles.gridItem}>
+      <TouchableOpacity 
+        style={styles.heartButton}
+        onPress={() => removeFromWishlist(item)} 
+      >
+        <Icon name="heart" size={24} color="#FF6B9D" />
+      </TouchableOpacity>
+
       <TouchableOpacity 
         onPress={() => navigation.navigate('ProductDetail', { product: item.product })}
-        style={styles.itemImageContainer}
+        style={styles.itemContainer}
       >
         <Image 
           source={{ 
-            uri: item.product.primaryImage || 
-                (item.product.images && item.product.images[0]?.url) || 
-                'https://via.placeholder.com/100x100?text=No+Image'
+            uri: item.product?.primaryImage || 
+                (item.product?.images && item.product.images[0]?.url) || 
+                'https://via.placeholder.com/150x150?text=No+Image'
           }} 
-          style={styles.itemImage}
+          style={[styles.itemImage, isOutOfStock && styles.outOfStockImage]}
           resizeMode="cover"
         />
-      </TouchableOpacity>
-      
-      <View style={styles.itemContent}>
-        <TouchableOpacity 
-          onPress={() => navigation.navigate('ProductDetail', { product: item.product })}
-          style={styles.itemTextContainer}
-        >
-          <Text style={styles.itemName} numberOfLines={2}>{item.product.name}</Text>
-          {item.product.brand && (
-            <Text style={styles.itemBrand}>{item.product.brand}</Text>
+        
+        {isOutOfStock && (
+          <View style={styles.outOfStockBadge}>
+            <Text style={styles.outOfStockBadgeText}>Out of Stock</Text>
+          </View>
+        )}
+        
+        <View style={styles.itemDetails}>
+          <Text style={styles.itemName} numberOfLines={2}>
+            {item.product?.name || 'Unknown Product'}
+          </Text>
+          
+          {item.product?.brand && (
+            <Text style={styles.itemBrand} numberOfLines={1}>{item.product.brand}</Text>
           )}
-          <View style={styles.priceContainer}>
-            <Text style={styles.itemPrice}>₹{item.product.price}</Text>
-            {item.product.originalPrice && item.product.originalPrice > item.product.price && (
+          
+          <View style={styles.priceRow}>
+            <Text style={styles.itemPrice}>₹{item.product?.price || 0}</Text>
+            {item.product?.originalPrice && item.product.originalPrice > item.product.price && (
               <Text style={styles.originalPrice}>₹{item.product.originalPrice}</Text>
             )}
           </View>
-          <Text style={styles.itemCategory}>{item.product.category}</Text>
-          
-          {item.product.stock <= 5 && item.product.stock > 0 && (
+
+          {!isOutOfStock && item.product?.stock <= 5 && item.product?.stock > 0 && (
             <Text style={styles.lowStockText}>Only {item.product.stock} left!</Text>
           )}
-          {item.product.stock === 0 && (
-            <Text style={styles.outOfStockText}>Out of Stock</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-      
-      <View style={styles.itemActions}>
+        </View>
+      </TouchableOpacity>
+
+      {isOutOfStock ? (
         <TouchableOpacity
-          style={[styles.moveToCartButton, item.product.stock === 0 && styles.disabledButton]}
-          onPress={() => moveToCart(item)}
-          disabled={item.product.stock === 0}
+          style={[
+            styles.notifyButton,
+            hasNotificationRequest && styles.notifyButtonActive
+          ]}
+          onPress={() => handleNotifyMe(item)}
+          disabled={hasNotificationRequest}
         >
-          <Icon name="bag-outline" size={18} color={item.product.stock === 0 ? "#ccc" : "#fff"} />
-          <Text style={[styles.moveToCartText, item.product.stock === 0 && styles.disabledButtonText]}>
-            Add to Cart
+          <Icon 
+            name={hasNotificationRequest ? "notifications" : "notifications-outline"}
+            size={16} 
+            color={hasNotificationRequest ? "#4CAF50" : "#FF6B9D"} 
+          />
+          <Text style={[
+            styles.notifyButtonText,
+            hasNotificationRequest && styles.notifyButtonTextActive
+          ]}>
+            {hasNotificationRequest ? 'Will Notify You' : 'Notify Me'}
           </Text>
         </TouchableOpacity>
-        
+      ) : (
         <TouchableOpacity
-          style={styles.removeButton}
-          onPress={() => removeFromWishlist(item.product._id)}
+          style={[
+            styles.addToCartButton, 
+            isAddingThisItem && styles.disabledButton
+          ]}
+          onPress={() => moveToCart(item)}
+          disabled={isAddingThisItem}
         >
-          <Icon name="trash-outline" size={18} color="#fff" />
-          <Text style={styles.removeText}>Remove</Text>
+          {isAddingThisItem ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Icon name="bag-outline" size={16} color="#fff" />
+              <Text style={styles.addToCartText}>Add to Cart</Text>
+            </>
+          )}
         </TouchableOpacity>
-      </View>
+      )}
     </View>
   );
+};
+
 
   const renderEmptyWishlist = () => (
     <View style={styles.emptyContainer}>
@@ -212,13 +371,12 @@ const WishlistScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-            <Header/>
+      <Header/>
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >        
-
           <Icon name="arrow-back" size={24} color="#2C3E50" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Wishlist</Text>
@@ -232,9 +390,33 @@ const WishlistScreen = ({ navigation }) => {
           data={wishlistItems}
           renderItem={renderWishlistItem}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={styles.listContainer}
+          numColumns={2}
+          contentContainerStyle={styles.gridContainer}
+          columnWrapperStyle={styles.columnWrapper}
           showsVerticalScrollIndicator={false}
         />
+      )}
+
+      {toastVisible && (
+        <Animated.View
+          style={[
+            styles.toast,
+            {
+              opacity: toastAnim,
+              transform: [
+                {
+                  translateY: toastAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [20, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Icon name="checkmark-circle" size={20} color="#fff" />
+          <Text style={styles.toastText}>{toastMessage}</Text>
+        </Animated.View>
       )}
     </SafeAreaView>
   );
@@ -290,125 +472,110 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#7F8C8D',
   },
-  listContainer: {
-    padding: 20,
+  gridContainer: {
+    padding: 15,
   },
-  wishlistItem: {
+  columnWrapper: {
+    justifyContent: 'space-between',
+  },
+  gridItem: {
+    width: ITEM_WIDTH,
     backgroundColor: '#fff',
     borderRadius: 15,
-    padding: 15,
     marginBottom: 15,
-    flexDirection: 'row',
     shadowColor: '#FF6B9D',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
+    overflow: 'hidden',
   },
-  itemImageContainer: {
-    marginRight: 15,
+  heartButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 10,
+    backgroundColor: '#fff',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  itemContainer: {
+    width: '100%',
   },
   itemImage: {
-    width: 90,
-    height: 90,
-    borderRadius: 12,
+    width: '100%',
+    height: ITEM_WIDTH,
     backgroundColor: '#F8F8F8',
   },
-  itemContent: {
-    flex: 1,
-    marginRight: 10,
-  },
-  itemTextContainer: {
-    flex: 1,
+  itemDetails: {
+    padding: 12,
   },
   itemName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#2C3E50',
     marginBottom: 4,
-    lineHeight: 22,
+    lineHeight: 18,
+    minHeight: 36,
   },
   itemBrand: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#7F8C8D',
     marginBottom: 6,
   },
-  priceContainer: {
+  priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 6,
+    flexWrap: 'wrap',
   },
   itemPrice: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#FF6B9D',
-    marginRight: 8,
+    marginRight: 6,
   },
   originalPrice: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#9CA3AF',
     textDecorationLine: 'line-through',
   },
-  itemCategory: {
-    fontSize: 11,
-    color: '#6B7280',
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-    marginBottom: 6,
-    textTransform: 'capitalize',
-  },
   lowStockText: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#F59E0B',
     fontWeight: '600',
   },
   outOfStockText: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#EF4444',
     fontWeight: '600',
   },
-  itemActions: {
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: 80,
-  },
-  moveToCartButton: {
+  addToCartButton: {
     backgroundColor: '#FF6B9D',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
-    minWidth: 75,
+    paddingVertical: 10,
+    gap: 6,
   },
-  moveToCartText: {
+  addToCartText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
-    marginTop: 2,
   },
   disabledButton: {
     backgroundColor: '#E5E7EB',
   },
   disabledButtonText: {
     color: '#9CA3AF',
-  },
-  removeButton: {
-    backgroundColor: '#E74C3C',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    minWidth: 75,
-  },
-  removeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '600',
-    marginTop: 2,
   },
   emptyContainer: {
     flex: 1,
@@ -445,6 +612,69 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  toast: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: '#2ECC71',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+    gap: 8,
+  },
+  toastText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+   outOfStockImage: {
+    opacity: 0.5,
+  },
+  outOfStockBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  outOfStockBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  notifyButton: {
+    backgroundColor: '#FFF5F8',
+    borderWidth: 1.5,
+    borderColor: '#FF6B9D',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 6,
+  },
+  notifyButtonActive: {
+    backgroundColor: '#E8F5E9',
+    borderColor: '#4CAF50',
+  },
+  notifyButtonText: {
+    color: '#FF6B9D',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  notifyButtonTextActive: {
+    color: '#4CAF50',
   },
 });
 

@@ -1,4 +1,5 @@
-// src/Pages/Reviews/ReviewableItemsScreen.js
+// src/Pages/Reviews/ReviewableItemsScreen.js - FIXED VERSION
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -18,44 +19,84 @@ import Header from '../../Components/Header';
 
 const ReviewableItemsScreen = ({ route, navigation }) => {
   const { orderId } = route.params;
-  const { tokens } = useAuth();
+  const { tokens, user } = useAuth();
   
   const [loading, setLoading] = useState(true);
   const [orderData, setOrderData] = useState(null);
   const [items, setItems] = useState([]);
+  const [error, setError] = useState(null);
 
-  const getAuthHeaders = () => ({
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${tokens?.accessToken}`
-  });
+  const getAuthHeaders = () => {
+    const token = tokens?.accessToken || user?.token;
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    };
+  };
 
   useEffect(() => {
-    fetchReviewableItems();
-  }, []);
+    if (orderId) {
+      fetchReviewableItems();
+    } else {
+      setError('No order ID provided');
+      setLoading(false);
+    }
+  }, [orderId]);
 
   const fetchReviewableItems = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/reviews/order/${orderId}/items`, {
-        headers: getAuthHeaders(),
+      setError(null);
+
+      console.log('Fetching reviewable items for order:', orderId);
+      
+      const headers = getAuthHeaders();
+      console.log('Using auth headers:', { 
+        hasAuth: !!headers.Authorization,
+        authLength: headers.Authorization?.length 
       });
+
+      const url = `${API_URL}/reviews/order/${orderId}/items`;
+      console.log('Fetching from URL:', url);
+
+      const response = await fetch(url, { headers });
       
-      const data = await response.json();
+      console.log('Response status:', response.status);
+      const responseText = await response.text();
+      console.log('Response text:', responseText.substring(0, 200));
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError);
+        throw new Error('Invalid response from server');
+      }
       
+      console.log('Parsed response:', data);
+
       if (data.success) {
         setOrderData({
           orderId: data.data.orderId,
           orderNumber: data.data.orderNumber,
+          orderStatus: data.data.orderStatus,
         });
-        setItems(data.data.items);
+        setItems(data.data.items || []);
+        console.log('Items loaded:', data.data.items?.length || 0);
       } else {
-        Alert.alert('Error', data.message || 'Failed to load items');
-        navigation.goBack();
+        const errorMsg = data.message || 'Failed to load items';
+        console.error('API error:', errorMsg);
+        setError(errorMsg);
+        Alert.alert('Error', errorMsg);
       }
     } catch (error) {
       console.error('Fetch reviewable items error:', error);
-      Alert.alert('Error', 'Failed to load items');
-      navigation.goBack();
+      const errorMsg = error.message || 'Failed to load items';
+      setError(errorMsg);
+      Alert.alert('Error', errorMsg);
     } finally {
       setLoading(false);
     }
@@ -66,6 +107,8 @@ const ReviewableItemsScreen = ({ route, navigation }) => {
       Alert.alert('Already Reviewed', 'You have already reviewed this item');
       return;
     }
+    
+    console.log('Navigating to review screen with item:', item);
     
     navigation.navigate('WriteReviewScreen', {
       orderId: orderData.orderId,
@@ -117,8 +160,11 @@ const ReviewableItemsScreen = ({ route, navigation }) => {
             </View>
           ) : (
             <Image 
-              source={{ uri: item.image || 'https://via.placeholder.com/80x80' }}
+              source={{ 
+                uri: item.image || 'https://via.placeholder.com/80x80?text=No+Image' 
+              }}
               style={styles.itemImage}
+              onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
             />
           )}
         </View>
@@ -177,6 +223,45 @@ const ReviewableItemsScreen = ({ route, navigation }) => {
     );
   }
 
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Header />
+        
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Icon name="arrow-back" size={24} color="#2C3E50" />
+          </TouchableOpacity>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>Rate Your Order</Text>
+          </View>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <View style={styles.errorContainer}>
+          <Icon name="alert-circle-outline" size={80} color="#F44336" />
+          <Text style={styles.errorTitle}>Oops!</Text>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={fetchReviewableItems}
+          >
+            <Icon name="refresh" size={20} color="#FFFFFF" />
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.backToOrdersButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backToOrdersText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
   const unreviewedItems = items.filter(item => !item.reviewed);
   const reviewedItems = items.filter(item => item.reviewed);
 
@@ -234,8 +319,13 @@ const ReviewableItemsScreen = ({ route, navigation }) => {
             <Icon name="receipt-outline" size={80} color="#CCC" />
             <Text style={styles.emptyTitle}>No Items to Review</Text>
             <Text style={styles.emptySubtitle}>
-              This order doesn't have any reviewable items
+              This order doesn't have any reviewable items yet
             </Text>
+            {orderData && orderData.orderStatus && (
+              <Text style={styles.orderStatusText}>
+                Order Status: {orderData.orderStatus}
+              </Text>
+            )}
           </View>
         )}
 
@@ -253,6 +343,7 @@ const ReviewableItemsScreen = ({ route, navigation }) => {
   );
 };
 
+// Styles remain the same, adding new ones for error states
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -299,6 +390,56 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: '#7F8C8D',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#F44336',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#7F8C8D',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF6B9D',
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 25,
+    gap: 8,
+    marginBottom: 12,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  backToOrdersButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  backToOrdersText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#7F8C8D',
+  },
+  orderStatusText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: '#7F8C8D',
+    fontStyle: 'italic',
   },
   scrollView: {
     flex: 1,

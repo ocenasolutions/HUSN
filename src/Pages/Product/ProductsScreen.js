@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -27,7 +27,6 @@ const ProductsScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [products, setProducts] = useState([]);
-  const [filteredProducts, setFilteredProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [categories, setCategories] = useState([]);
@@ -173,57 +172,21 @@ const ProductsScreen = ({ navigation }) => {
     fetchProducts();
   }, [selectedCategory, sortBy]);
 
-  useEffect(() => {
-    handleSearch();
-  }, [searchQuery, products]);
-
-  const handleSearch = () => {
+  const filteredProducts = useMemo(() => {
     if (!searchQuery.trim()) {
-      setFilteredProducts(products);
-      return;
+      return products;
     }
 
-    const filtered = products.filter(product =>
+    return products.filter(product =>
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.category.toLowerCase().includes(searchQuery.toLowerCase())
     );
-    
-    setFilteredProducts(filtered);
-  };
+  }, [searchQuery, products]);
 
   const handleLoadMore = () => {
     if (pagination.hasNext && !loading) {
       fetchProducts(pagination.currentPage + 1);
-    }
-  };
-
-  const addToCart = async (product) => {
-    if (!user) {
-      Alert.alert('Login Required', 'Please login to add items to cart');
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_URL}/product-cart/add`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          productId: product._id,
-          quantity: 1
-        })
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        await fetchCartCount();
-        Alert.alert('Success', 'Product added to cart!');
-      } else {
-        Alert.alert('Error', data.message || 'Failed to add to cart');
-      }
-    } catch (error) {
-      console.error('Error adding to cart:', error);
-      Alert.alert('Error', 'Failed to add to cart');
     }
   };
 
@@ -302,173 +265,170 @@ const ProductsScreen = ({ navigation }) => {
     </TouchableOpacity>
   );
 
-  const displayProducts = searchQuery.trim() ? filteredProducts : products;
-
-const QuickAddButton = ({ product }) => {
-  const cartItem = cartItems.get(product._id);
-  const [isUpdating, setIsUpdating] = useState(false);
-  
-  const handleAddToCart = async (e) => {
-    e?.stopPropagation();
+  const QuickAddButton = ({ product }) => {
+    const cartItem = cartItems.get(product._id);
+    const [isUpdating, setIsUpdating] = useState(false);
     
-    if (!user) {
-      Alert.alert('Login Required', 'Please login to add items to cart');
-      return;
-    }
-
-    setIsUpdating(true);
-
-    try {
-      const response = await fetch(`${API_URL}/product-cart/add`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          productId: product._id,
-          quantity: 1
-        })
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        await fetchCartCount();
-        setTimeout(() => setIsUpdating(false), 100);
-      } else {
-        setIsUpdating(false);
-        Alert.alert('Error', data.message || 'Failed to add to cart');
-      }
-    } catch (error) {
-      setIsUpdating(false);
-      console.error('Error adding to cart:', error);
-      Alert.alert('Error', 'Failed to add to cart');
-    }
-  };
-  
-  const handleUpdateQuantity = async (newQuantity, e) => {
-    e?.stopPropagation();
-    
-    if (newQuantity < 1 || isUpdating) return;
-    
-    if (newQuantity > product.stock) {
-      Alert.alert('Stock Limit', `Only ${product.stock} items available in stock`);
-      return;
-    }
-    
-    setIsUpdating(true);
-    
-    try {
-      const cartResponse = await fetch(`${API_URL}/product-cart`, {
-        headers: getAuthHeaders()
-      });
-      const cartData = await cartResponse.json();
+    const handleAddToCart = async (e) => {
+      e?.stopPropagation();
       
-      if (!cartData.success) {
-        Alert.alert('Error', 'Failed to fetch cart');
+      if (!user) {
+        Alert.alert('Login Required', 'Please login to add items to cart');
+        return;
+      }
+
+      setIsUpdating(true);
+
+      try {
+        const response = await fetch(`${API_URL}/product-cart/add`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            productId: product._id,
+            quantity: 1
+          })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          await fetchCartCount();
+          setTimeout(() => setIsUpdating(false), 100);
+        } else {
+          setIsUpdating(false);
+          Alert.alert('Error', data.message || 'Failed to add to cart');
+        }
+      } catch (error) {
         setIsUpdating(false);
+        console.error('Error adding to cart:', error);
+        Alert.alert('Error', 'Failed to add to cart');
+      }
+    };
+    
+    const handleUpdateQuantity = async (newQuantity, e) => {
+      e?.stopPropagation();
+      
+      if (newQuantity < 1 || isUpdating) return;
+      
+      if (newQuantity > product.stock) {
+        Alert.alert('Stock Limit', `Only ${product.stock} items available in stock`);
         return;
       }
       
-      const currentCartItem = cartData.data.items.find(
-        item => item.product._id === product._id
+      setIsUpdating(true);
+      
+      try {
+        const cartResponse = await fetch(`${API_URL}/product-cart`, {
+          headers: getAuthHeaders()
+        });
+        const cartData = await cartResponse.json();
+        
+        if (!cartData.success) {
+          Alert.alert('Error', 'Failed to fetch cart');
+          setIsUpdating(false);
+          return;
+        }
+        
+        const currentCartItem = cartData.data.items.find(
+          item => item.product._id === product._id
+        );
+        
+        if (!currentCartItem) {
+          setIsUpdating(false);
+          await fetchCartCount();
+          return;
+        }
+        
+        const response = await fetch(`${API_URL}/product-cart/${currentCartItem._id}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ quantity: newQuantity })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+          await fetchCartCount();
+        } else {
+          Alert.alert('Error', data.message || 'Failed to update quantity');
+        }
+      } catch (error) {
+        console.error('Update quantity error:', error);
+        Alert.alert('Error', 'Failed to update quantity');
+      } finally {
+        setIsUpdating(false);
+      }
+    };
+    
+    if (!cartItem || !cartItem.quantity) {
+      return (
+        <TouchableOpacity
+          style={styles.addToBagButton}
+          onPress={handleAddToCart}
+          disabled={isUpdating}
+        >
+          {isUpdating ? (
+            <ActivityIndicator size="small" color="#D76D77" />
+          ) : (
+            <Text style={styles.addToBagText}>Add to Bag</Text>
+          )}
+        </TouchableOpacity>
       );
-      
-      if (!currentCartItem) {
-        setIsUpdating(false);
-        await fetchCartCount();
-        return;
-      }
-      
-      const response = await fetch(`${API_URL}/product-cart/${currentCartItem._id}`, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ quantity: newQuantity })
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        await fetchCartCount();
-      } else {
-        Alert.alert('Error', data.message || 'Failed to update quantity');
-      }
-    } catch (error) {
-      console.error('Update quantity error:', error);
-      Alert.alert('Error', 'Failed to update quantity');
-    } finally {
-      setIsUpdating(false);
     }
-  };
-  
-  // Check if item is in cart
-  if (!cartItem || !cartItem.quantity) {
+    
+    const isAtMinQuantity = cartItem.quantity <= 1;
+    const isAtMaxStock = cartItem.quantity >= product.stock;
+    
     return (
-      <TouchableOpacity
-        style={styles.addToBagButton}
-        onPress={handleAddToCart}
-        disabled={isUpdating}
-      >
-        {isUpdating ? (
-          <ActivityIndicator size="small" color="#D76D77" />
-        ) : (
-          <Text style={styles.addToBagText}>Add to Bag</Text>
-        )}
-      </TouchableOpacity>
-    );
-  }
-  
-  const isAtMinQuantity = cartItem.quantity <= 1;
-  const isAtMaxStock = cartItem.quantity >= product.stock;
-  
-  return (
-    <View style={styles.quantityControlWithCorners}>
-      <TouchableOpacity
-        style={[
-          styles.cornerQuantityButton, 
-          styles.cornerLeftButton,
-          (isUpdating || isAtMinQuantity) && styles.quantityButtonDisabled
-        ]}
-        onPress={(e) => handleUpdateQuantity(cartItem.quantity - 1, e)}
-        disabled={isUpdating || isAtMinQuantity}
-      >
-        <Icon 
-          name="remove" 
-          size={16} 
-          color={isAtMinQuantity ? "#ccc" : "#D76D77"} 
-        />
-      </TouchableOpacity>
-      
-      <View style={styles.quantityDisplayCenter}>
-        {isUpdating ? (
-          <ActivityIndicator size="small" color="#D76D77" />
-        ) : (
-          <Text style={styles.quantityTextCenter}>{cartItem.quantity}</Text>
-        )}
+      <View style={styles.quantityControlWithCorners}>
+        <TouchableOpacity
+          style={[
+            styles.cornerQuantityButton, 
+            styles.cornerLeftButton,
+            (isUpdating || isAtMinQuantity) && styles.quantityButtonDisabled
+          ]}
+          onPress={(e) => handleUpdateQuantity(cartItem.quantity - 1, e)}
+          disabled={isUpdating || isAtMinQuantity}
+        >
+          <Icon 
+            name="remove" 
+            size={16} 
+            color={isAtMinQuantity ? "#ccc" : "#D76D77"} 
+          />
+        </TouchableOpacity>
+        
+        <View style={styles.quantityDisplayCenter}>
+          {isUpdating ? (
+            <ActivityIndicator size="small" color="#D76D77" />
+          ) : (
+            <Text style={styles.quantityTextCenter}>{cartItem.quantity}</Text>
+          )}
+        </View>
+        
+        <TouchableOpacity
+          style={[
+            styles.cornerQuantityButton, 
+            styles.cornerRightButton,
+            (isUpdating || isAtMaxStock) && styles.quantityButtonDisabled
+          ]}
+          onPress={(e) => handleUpdateQuantity(cartItem.quantity + 1, e)}
+          disabled={isUpdating || isAtMaxStock}
+        >
+          <Icon 
+            name="add" 
+            size={16} 
+            color={isAtMaxStock ? "#ccc" : "#D76D77"} 
+          />
+        </TouchableOpacity>
       </View>
-      
-      <TouchableOpacity
-        style={[
-          styles.cornerQuantityButton, 
-          styles.cornerRightButton,
-          (isUpdating || isAtMaxStock) && styles.quantityButtonDisabled
-        ]}
-        onPress={(e) => handleUpdateQuantity(cartItem.quantity + 1, e)}
-        disabled={isUpdating || isAtMaxStock}
-      >
-        <Icon 
-          name="add" 
-          size={16} 
-          color={isAtMaxStock ? "#ccc" : "#D76D77"} 
-        />
-      </TouchableOpacity>
-    </View>
-  );
-};
+    );
+  };
 
   const renderProductItem = ({ item }) => {
     const isInWishlist = wishlistItems.includes(item._id);
     const isOutOfStock = item.stock === 0 || item.stock < 1;
     const cartItem = cartItems.get(item._id);
-    const isInCart = !!cartItem;
     const averageRating = item.rating || 0;  
-const totalReviews = item.reviewCount || 0;
+    const totalReviews = item.reviewCount || 0;
+    
     return (
       <View style={styles.productCardContainer}>
         <TouchableOpacity
@@ -498,17 +458,17 @@ const totalReviews = item.reviewCount || 0;
             </TouchableOpacity>
           </View>
 
-  <View style={styles.productInfo}>
-  <View>
-    <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
-    <View style={styles.productRatingContainer}>
-      {renderStarRating(averageRating, 12)}
-      <Text style={styles.productRatingText}>
-        {averageRating.toFixed(1)} ({totalReviews})
-      </Text>
-    </View>
-    <Text style={styles.productPrice}>₹{item.price}</Text>
-  </View>
+          <View style={styles.productInfo}>
+            <View>
+              <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
+              <View style={styles.productRatingContainer}>
+                {renderStarRating(averageRating, 12)}
+                <Text style={styles.productRatingText}>
+                  {averageRating.toFixed(1)} ({totalReviews})
+                </Text>
+              </View>
+              <Text style={styles.productPrice}>₹{item.price}</Text>
+            </View>
             
             <View style={styles.productActions}>
               {isOutOfStock ? (
@@ -530,45 +490,45 @@ const totalReviews = item.reviewCount || 0;
   };
 
   const renderStarRating = (rating, size = 12) => {
-  const stars = [];
-  const fullStars = Math.floor(rating);
-  const hasHalfStar = rating % 1 >= 0.5;
-  
-  for (let i = 1; i <= 5; i++) {
-    if (i <= fullStars) {
-      stars.push(
-        <Icon
-          key={i}
-          name="star"
-          size={size}
-          color="#FFD700"
-          style={{ marginRight: 1 }}
-        />
-      );
-    } else if (i === fullStars + 1 && hasHalfStar) {
-      stars.push(
-        <Icon
-          key={i}
-          name="star-half"
-          size={size}
-          color="#FFD700"
-          style={{ marginRight: 1 }}
-        />
-      );
-    } else {
-      stars.push(
-        <Icon
-          key={i}
-          name="star-outline"
-          size={size}
-          color="#FFD700"
-          style={{ marginRight: 1 }}
-        />
-      );
+    const stars = [];
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 >= 0.5;
+    
+    for (let i = 1; i <= 5; i++) {
+      if (i <= fullStars) {
+        stars.push(
+          <Icon
+            key={i}
+            name="star"
+            size={size}
+            color="#FFD700"
+            style={{ marginRight: 1 }}
+          />
+        );
+      } else if (i === fullStars + 1 && hasHalfStar) {
+        stars.push(
+          <Icon
+            key={i}
+            name="star-half"
+            size={size}
+            color="#FFD700"
+            style={{ marginRight: 1 }}
+          />
+        );
+      } else {
+        stars.push(
+          <Icon
+            key={i}
+            name="star-outline"
+            size={size}
+            color="#FFD700"
+            style={{ marginRight: 1 }}
+          />
+        );
+      }
     }
-  }
-  return <View style={styles.starContainer}>{stars}</View>;
-};
+    return <View style={styles.starContainer}>{stars}</View>;
+  };
 
   const renderCategoryItem = ({ item }) => (
     <TouchableOpacity
@@ -703,60 +663,59 @@ const totalReviews = item.reviewCount || 0;
     </Modal>
   );
 
-  // ListHeaderComponent for FlatList
-  const ListHeader = () => (
-    <>
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Icon name="search-outline" size={18} color="#8E8E8F" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search for products"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor="#8E8E8F"
+  // Memoized ListHeader to prevent re-renders
+  const ListHeader = useMemo(() => {
+    return (
+      <>
+        <View style={styles.searchContainer}>
+          <View style={styles.searchBar}>
+            <Icon name="search-outline" size={18} color="#8E8E8F" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search for products"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholderTextColor="#8E8E8F"
+            />
+          </View>
+        </View>
+
+        <View style={styles.categoriesSection}>
+          <FlatList
+            data={categories}
+            renderItem={renderCategoryItem}
+            keyExtractor={(item) => item.name}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoriesList}
           />
         </View>
-      </View>
 
-      {/* Categories */}
-      <View style={styles.categoriesSection}>
-        <FlatList
-          data={categories}
-          renderItem={renderCategoryItem}
-          keyExtractor={(item) => item.name}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoriesList}
-        />
-      </View>
-
-      {/* Sort and Filter Row */}
-      <View style={styles.sortFilterRow}>
-        <TouchableOpacity 
-          style={styles.sortButton}
-          onPress={() => setShowFilters(true)}
-        >
-          <Text style={styles.sortButtonText}>Sort</Text>
-          <Icon name="chevron-down" size={16} color="#333" />
-        </TouchableOpacity>
+        <View style={styles.sortFilterRow}>
+          <TouchableOpacity 
+            style={styles.sortButton}
+            onPress={() => setShowFilters(true)}
+          >
+            <Text style={styles.sortButtonText}>Sort</Text>
+            <Icon name="chevron-down" size={16} color="#333" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.filterButton}
+            onPress={() => setShowFilters(true)}
+          >
+            <Text style={styles.filterButtonText}>Filter</Text>
+            <Icon name="chevron-down" size={16} color="#333" />
+          </TouchableOpacity>
+        </View>
         
-        <TouchableOpacity 
-          style={styles.filterButton}
-          onPress={() => setShowFilters(true)}
-        >
-          <Text style={styles.filterButtonText}>Filter</Text>
-          <Icon name="chevron-down" size={16} color="#333" />
-        </TouchableOpacity>
-      </View>
-      
-      <PopularCategories/>
+        <PopularCategories/>
+        <FeaturedProducts />
+      </>
+    );
+  }, [searchQuery, categories, selectedCategory]);
 
-      {/* Featured Products */}
-      <FeaturedProducts />
-    </>
-  );
+  const keyExtractor = useCallback((item) => item._id, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -768,7 +727,7 @@ const totalReviews = item.reviewCount || 0;
           <ActivityIndicator size="large" color="#D76D77" />
           <Text style={styles.loadingText}>Loading products...</Text>
         </View>
-      ) : displayProducts.length === 0 ? (
+      ) : filteredProducts.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Icon name="search-outline" size={64} color="#CCC" />
           <Text style={styles.emptyTitle}>No products found</Text>
@@ -778,14 +737,17 @@ const totalReviews = item.reviewCount || 0;
         </View>
       ) : (
         <FlatList
-          data={displayProducts}
+          data={filteredProducts}
           renderItem={renderProductItem}
-          keyExtractor={(item) => item._id}
+          keyExtractor={keyExtractor}
           numColumns={2}
           columnWrapperStyle={styles.productRow}
           ListHeaderComponent={ListHeader}
           contentContainerStyle={styles.flatListContent}
           showsVerticalScrollIndicator={false}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={10}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -808,7 +770,6 @@ const totalReviews = item.reviewCount || 0;
         />
       )}
       
-      {/* Floating Cart Button */}
       {cartItemCount > 0 && (
         <TouchableOpacity
           style={styles.floatingCartButton}
@@ -818,7 +779,7 @@ const totalReviews = item.reviewCount || 0;
           <View style={styles.cartButtonContent}>
             <Text style={styles.cartButtonText}>View Cart</Text>
             <View style={{ position: 'relative' }}>
-              <Icon name="cart" size={24} color="#FFF" />
+              <Icon name="cart" size={24} color="#D76D77" />
               <Text style={styles.cartBadgeText}>{cartItemCount}</Text>
             </View>
           </View>
@@ -1226,40 +1187,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D76D77',
   },
-  quantityControl: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#D76D77',
-    borderRadius: 10,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    alignSelf: 'center',
-    width: '110%',
-  },
-  quantityButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   quantityButtonDisabled: {
     opacity: 0.5,
-  },
-  quantityButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFF',
-    lineHeight: 18,
-  },
-  quantityText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#D76D77',
-    marginHorizontal: 12,
-    minWidth: 20,
-    textAlign: 'center',
   },
   floatingCartButton: {
     position: 'absolute',
@@ -1267,7 +1196,7 @@ const styles = StyleSheet.create({
     right: 20,
     width: 150,
     height: 50,
-    backgroundColor: '#D76D77',
+    backgroundColor: '#F5C6CB',
     borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 24,
@@ -1289,15 +1218,15 @@ const styles = StyleSheet.create({
     right: -5,
     fontSize: 10,
     fontWeight: '900',
-    color: '#FFF',
+    color: '#D76D77',
   },
   cartButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFF',
+    color: '#D76D77',
     marginRight: 12,
   },
-quantityControlWithCorners: {
+  quantityControlWithCorners: {
     position: 'relative',
     backgroundColor: '#F5C6CB',
     borderRadius: 10,
@@ -1338,20 +1267,20 @@ quantityControlWithCorners: {
     color: '#D76D77',
   },
   productRatingContainer: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  marginBottom: 4,
-},
-starContainer: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  marginRight: 4,
-},
-productRatingText: {
-  fontSize: 11,
-  color: '#666',
-  fontWeight: '500',
-},
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  starContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 4,
+  },
+  productRatingText: {
+    fontSize: 11,
+    color: '#666',
+    fontWeight: '500',
+  },
 });
 
 export default ProductsScreen;

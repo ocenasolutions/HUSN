@@ -259,7 +259,7 @@ const TrackOrderScreen = ({ navigation, route }) => {
         {orderData.status === 'delivered' || orderData.status === 'completed' ? (
           <TouchableOpacity
             style={styles.reviewButton}
-            onPress={() => navigation.navigate('SubmitReviewScreen', {
+            onPress={() => navigation.navigate('ReviewableItemsScreen', {
               referenceType: orderType === 'booking' ? 'Booking' : 'Order',
               referenceId: orderData._id,
               orderNumber: orderData.orderNumber || orderData.bookingNumber

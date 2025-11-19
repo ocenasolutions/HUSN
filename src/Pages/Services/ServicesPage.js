@@ -919,7 +919,7 @@ const ServicesPage = ({ navigation }) => {
           <View style={styles.cartButtonContent}>
             <Text style={styles.cartButtonText}>View Cart</Text>
             <View style={{ position: 'relative' }}>
-              <Icon name="cart" size={24} color="#FFF" />
+              <Icon name="cart" size={24} color="#D76D77" />
               <Text style={styles.cartBadgeText}>{totalCartItems}</Text>
             </View>
           </View>
@@ -1529,7 +1529,7 @@ const styles = StyleSheet.create({
     right: 20,    
     width: 150,
     height: 45,
-    backgroundColor: '#FF6B9D',
+    backgroundColor: '#F5C6CB',
     borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 24,
@@ -1551,12 +1551,12 @@ const styles = StyleSheet.create({
     right: -5,
     fontSize: 10,
     fontWeight: '900',
-    color: '#ffffffff',
+    color: '#D76D77',
   },
   cartButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFF',
+    color: '#D76D77',
     left: -10,
     marginLeft: 12,
   },

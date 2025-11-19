@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,8 +12,10 @@ import {
   Modal,
   TextInput,
   RefreshControl,
+  Keyboard,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import * as Location from 'expo-location';
 import { useAuth } from '../../contexts/AuthContext';
 import { API_URL } from '../../API/config';
 import Header from '../../Components/Header';
@@ -26,6 +28,8 @@ const SavedAddressesScreen = ({ navigation, route }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingAddress, setEditingAddress] = useState(null);
+  
+  // Form states
   const [formData, setFormData] = useState({
     fullName: '',
     phoneNumber: '',
@@ -36,8 +40,25 @@ const SavedAddressesScreen = ({ navigation, route }) => {
     pincode: '',
     addressType: 'Home'
   });
+  
+  // Autocomplete states
+  const [citySuggestions, setCitySuggestions] = useState([]);
+  const [stateSuggestions, setStateSuggestions] = useState([]);
+  const [showCitySuggestions, setShowCitySuggestions] = useState(false);
+  const [showStateSuggestions, setShowStateSuggestions] = useState(false);
+  const [pincodeValidating, setPincodeValidating] = useState(false);
+  const [pincodeValid, setPincodeValid] = useState(null);
+  
+  // Location states
+  const [fetchingLocation, setFetchingLocation] = useState(false);
+  
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+
+  // Debounce timer refs
+  const cityDebounceTimer = useRef(null);
+  const stateDebounceTimer = useRef(null);
+  const pincodeDebounceTimer = useRef(null);
 
   const addressTypes = ['Home', 'Work', 'Other'];
 
@@ -71,7 +92,6 @@ const SavedAddressesScreen = ({ navigation, route }) => {
     }
   };
 
-  // Refresh addresses when screen is focused
   useFocusEffect(
     useCallback(() => {
       fetchAddresses();
@@ -81,6 +101,219 @@ const SavedAddressesScreen = ({ navigation, route }) => {
   const onRefresh = () => {
     setRefreshing(true);
     fetchAddresses(false);
+  };
+
+  // Fetch city suggestions
+  const fetchCitySuggestions = async (query) => {
+    if (query.length < 2) {
+      setCitySuggestions([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${API_URL}/addresses/suggestions/cities?query=${encodeURIComponent(query)}`,
+        { headers: getAuthHeaders() }
+      );
+      const data = await response.json();
+      
+      if (data.success) {
+        setCitySuggestions(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching city suggestions:', error);
+    }
+  };
+
+  // Fetch state suggestions
+  const fetchStateSuggestions = async (query) => {
+    try {
+      const response = await fetch(
+        `${API_URL}/addresses/suggestions/states?query=${encodeURIComponent(query)}`,
+        { headers: getAuthHeaders() }
+      );
+      const data = await response.json();
+      
+      if (data.success) {
+        setStateSuggestions(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching state suggestions:', error);
+    }
+  };
+
+  // Validate pincode and autofill city/state
+  const validatePincode = async (pincode) => {
+    if (!/^\d{6}$/.test(pincode)) {
+      setPincodeValid(false);
+      return;
+    }
+
+    try {
+      setPincodeValidating(true);
+      const response = await fetch(
+        `${API_URL}/addresses/validate-pincode/${pincode}`,
+        { headers: getAuthHeaders() }
+      );
+      const data = await response.json();
+      
+      if (data.success) {
+        setPincodeValid(true);
+        // Auto-fill city and state only if they're empty
+        setFormData(prev => ({
+          ...prev,
+          city: prev.city || data.data.city,
+          state: prev.state || data.data.state
+        }));
+        Alert.alert(
+          'Pincode Validated',
+          `Location: ${data.data.city}, ${data.data.state}\n\nYou can edit these fields if needed.`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        setPincodeValid(false);
+        Alert.alert('Invalid Pincode', data.message || 'Please enter a valid pincode');
+      }
+    } catch (error) {
+      console.error('Error validating pincode:', error);
+      setPincodeValid(false);
+    } finally {
+      setPincodeValidating(false);
+    }
+  };
+
+  // Fetch address from live location
+  const fetchLiveLocation = async () => {
+    try {
+      setFetchingLocation(true);
+      
+      // Request location permission
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Denied', 
+          'Location permission is required to use this feature. You can still enter your address manually.',
+          [{ text: 'OK' }]
+        );
+        setFetchingLocation(false);
+        return;
+      }
+
+      // Show loading message
+      Alert.alert(
+        'Fetching Location',
+        'Getting your current location...',
+        [{ text: 'Cancel', onPress: () => setFetchingLocation(false) }]
+      );
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+        timeout: 15000,
+        maximumAge: 10000,
+      });
+
+      const { latitude, longitude } = location.coords;
+
+      // Fetch address details from backend
+      const response = await fetch(
+        `${API_URL}/addresses/reverse-geocode?latitude=${latitude}&longitude=${longitude}`,
+        { headers: getAuthHeaders() }
+      );
+      const data = await response.json();
+
+      if (data.success) {
+        // Pre-fill the form with location data
+        setFormData(prev => ({
+          ...prev,
+          address: data.data.street || data.data.fullAddress || prev.address,
+          city: data.data.city || prev.city,
+          state: data.data.state || prev.state,
+          pincode: data.data.pincode || prev.pincode,
+          landmark: data.data.landmark || prev.landmark
+        }));
+        
+        Alert.alert(
+          'Location Fetched!', 
+          'Your location has been filled in. Please review and edit any fields as needed.',
+          [{ text: 'OK' }]
+        );
+        
+        // If pincode was fetched, mark it as valid
+        if (data.data.pincode && /^\d{6}$/.test(data.data.pincode)) {
+          setPincodeValid(true);
+        }
+      } else {
+        Alert.alert(
+          'Location Fetch Failed', 
+          'Could not get address from your location. Please enter your address manually.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error fetching live location:', error);
+      Alert.alert(
+        'Error', 
+        'Failed to get current location. Please enter your address manually or try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setFetchingLocation(false);
+    }
+  };
+
+  const handleCityChange = (text) => {
+    setFormData(prev => ({ ...prev, city: text }));
+    setShowCitySuggestions(true);
+    
+    if (cityDebounceTimer.current) {
+      clearTimeout(cityDebounceTimer.current);
+    }
+    
+    cityDebounceTimer.current = setTimeout(() => {
+      fetchCitySuggestions(text);
+    }, 300);
+  };
+
+  const handleStateChange = (text) => {
+    setFormData(prev => ({ ...prev, state: text }));
+    setShowStateSuggestions(true);
+    
+    if (stateDebounceTimer.current) {
+      clearTimeout(stateDebounceTimer.current);
+    }
+    
+    stateDebounceTimer.current = setTimeout(() => {
+      fetchStateSuggestions(text);
+    }, 300);
+  };
+
+  const handlePincodeChange = (text) => {
+    setFormData(prev => ({ ...prev, pincode: text }));
+    setPincodeValid(null);
+    
+    if (pincodeDebounceTimer.current) {
+      clearTimeout(pincodeDebounceTimer.current);
+    }
+    
+    if (text.length === 6) {
+      pincodeDebounceTimer.current = setTimeout(() => {
+        validatePincode(text);
+      }, 500);
+    }
+  };
+
+  const selectCity = (city) => {
+    setFormData(prev => ({ ...prev, city }));
+    setShowCitySuggestions(false);
+    setCitySuggestions([]);
+    Keyboard.dismiss();
+  };
+
+  const selectState = (state) => {
+    setFormData(prev => ({ ...prev, state }));
+    setShowStateSuggestions(false);
+    setStateSuggestions([]);
+    Keyboard.dismiss();
   };
 
   const resetForm = () => {
@@ -94,6 +327,11 @@ const SavedAddressesScreen = ({ navigation, route }) => {
       pincode: '',
       addressType: 'Home'
     });
+    setPincodeValid(null);
+    setCitySuggestions([]);
+    setStateSuggestions([]);
+    setShowCitySuggestions(false);
+    setShowStateSuggestions(false);
   };
 
   const openModal = (address = null) => {
@@ -109,6 +347,7 @@ const SavedAddressesScreen = ({ navigation, route }) => {
         pincode: address.pincode || '',
         addressType: address.addressType || 'Home'
       });
+      setPincodeValid(true);
     } else {
       setEditingAddress(null);
       resetForm();
@@ -125,9 +364,7 @@ const SavedAddressesScreen = ({ navigation, route }) => {
   const validateForm = () => {
     const errors = [];
     
-    if (!formData.fullName.trim()) {
-      errors.push('Full name is required');
-    }
+    if (!formData.fullName.trim()) errors.push('Full name is required');
     
     if (!formData.phoneNumber.trim()) {
       errors.push('Phone number is required');
@@ -135,17 +372,9 @@ const SavedAddressesScreen = ({ navigation, route }) => {
       errors.push('Please enter a valid 10-digit phone number');
     }
     
-    if (!formData.address.trim()) {
-      errors.push('Address is required');
-    }
-    
-    if (!formData.city.trim()) {
-      errors.push('City is required');
-    }
-    
-    if (!formData.state.trim()) {
-      errors.push('State is required');
-    }
+    if (!formData.address.trim()) errors.push('Address is required');
+    if (!formData.city.trim()) errors.push('City is required');
+    if (!formData.state.trim()) errors.push('State is required');
     
     if (!formData.pincode.trim()) {
       errors.push('Pincode is required');
@@ -172,7 +401,6 @@ const SavedAddressesScreen = ({ navigation, route }) => {
       
       const method = editingAddress ? 'PUT' : 'POST';
       
-      // Clean phone number - remove any non-digits
       const cleanedData = {
         ...formData,
         phoneNumber: formData.phoneNumber.replace(/\D/g, ''),
@@ -376,7 +604,24 @@ const SavedAddressesScreen = ({ navigation, route }) => {
           <Text style={styles.modalTitle}>
             {editingAddress ? 'Edit Address' : 'Add New Address'}
           </Text>
-          <View style={styles.placeholder} />
+          <TouchableOpacity 
+            onPress={fetchLiveLocation}
+            disabled={fetchingLocation}
+            style={styles.locationButton}
+          >
+            {fetchingLocation ? (
+              <ActivityIndicator size="small" color="#FF1493" />
+            ) : (
+              <Icon name="navigate" size={24} color="#FF1493" />
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.locationHintContainer}>
+          <Icon name="information-circle-outline" size={16} color="#666" />
+          <Text style={styles.locationHint}>
+            Tap the location icon to auto-fill or enter manually below
+          </Text>
         </View>
 
         <ScrollView 
@@ -434,17 +679,81 @@ const SavedAddressesScreen = ({ navigation, route }) => {
             />
           </View>
 
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Pincode *</Text>
+            <View style={styles.pincodeContainer}>
+              <TextInput
+                style={[styles.textInput, styles.pincodeInput, { flex: 1 }]}
+                value={formData.pincode}
+                onChangeText={handlePincodeChange}
+                placeholder="6-digit pincode"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
+                maxLength={6}
+              />
+              {pincodeValidating && (
+                <ActivityIndicator 
+                  size="small" 
+                  color="#FF1493" 
+                  style={styles.pincodeLoader} 
+                />
+              )}
+              {pincodeValid === true && (
+                <Icon 
+                  name="checkmark-circle" 
+                  size={24} 
+                  color="#10B981" 
+                  style={styles.pincodeIcon}
+                />
+              )}
+              {pincodeValid === false && (
+                <Icon 
+                  name="close-circle" 
+                  size={24} 
+                  color="#E74C3C" 
+                  style={styles.pincodeIcon}
+                />
+              )}
+            </View>
+          </View>
+
           <View style={styles.rowInputs}>
             <View style={[styles.inputGroup, styles.halfWidth]}>
               <Text style={styles.inputLabel}>City *</Text>
               <TextInput
                 style={styles.textInput}
                 value={formData.city}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, city: text }))}
+                onChangeText={handleCityChange}
+                onFocus={() => {
+                  setShowCitySuggestions(true);
+                  if (formData.city.length >= 2) {
+                    fetchCitySuggestions(formData.city);
+                  }
+                }}
                 placeholder="City"
                 placeholderTextColor="#999"
                 autoCapitalize="words"
               />
+              {showCitySuggestions && citySuggestions.length > 0 && (
+                <View style={styles.suggestionsContainer}>
+                  <ScrollView 
+                    style={styles.suggestionsList}
+                    keyboardShouldPersistTaps="handled"
+                    nestedScrollEnabled
+                  >
+                    {citySuggestions.map((city, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        style={styles.suggestionItem}
+                        onPress={() => selectCity(city)}
+                      >
+                        <Icon name="location-outline" size={16} color="#666" />
+                        <Text style={styles.suggestionText}>{city}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
             </View>
 
             <View style={[styles.inputGroup, styles.halfWidth]}>
@@ -452,25 +761,36 @@ const SavedAddressesScreen = ({ navigation, route }) => {
               <TextInput
                 style={styles.textInput}
                 value={formData.state}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, state: text }))}
+                onChangeText={handleStateChange}
+                onFocus={() => {
+                  setShowStateSuggestions(true);
+                  fetchStateSuggestions(formData.state);
+                }}
                 placeholder="State"
                 placeholderTextColor="#999"
                 autoCapitalize="words"
               />
+              {showStateSuggestions && stateSuggestions.length > 0 && (
+                <View style={styles.suggestionsContainer}>
+                  <ScrollView 
+                    style={styles.suggestionsList}
+                    keyboardShouldPersistTaps="handled"
+                    nestedScrollEnabled
+                  >
+                    {stateSuggestions.map((state, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        style={styles.suggestionItem}
+                        onPress={() => selectState(state)}
+                      >
+                        <Icon name="map-outline" size={16} color="#666" />
+                        <Text style={styles.suggestionText}>{state}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
             </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Pincode *</Text>
-            <TextInput
-              style={[styles.textInput, styles.pincodeInput]}
-              value={formData.pincode}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, pincode: text }))}
-              placeholder="6-digit pincode"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
-              maxLength={6}
-            />
           </View>
 
           <View style={styles.inputGroup}>
@@ -546,7 +866,7 @@ const SavedAddressesScreen = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-              <Header/>
+      <Header/>
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
@@ -614,6 +934,14 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFF5F8',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  locationButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -766,8 +1094,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  
-  // Modal Styles
   modalContainer: {
     flex: 1,
     backgroundColor: '#fff',
@@ -789,6 +1115,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
   },
+  locationHintContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F9FF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+  },
+  locationHint: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 6,
+    flex: 1,
+  },
   modalBody: {
     flex: 1,
     paddingHorizontal: 16,
@@ -799,6 +1140,7 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     marginBottom: 20,
+    position: 'relative',
   },
   inputLabel: {
     fontSize: 14,
@@ -819,8 +1161,21 @@ const styles = StyleSheet.create({
     height: 80,
     textAlignVertical: 'top',
   },
+  pincodeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
   pincodeInput: {
-    width: '50%',
+    flex: 1,
+  },
+  pincodeLoader: {
+    position: 'absolute',
+    right: 12,
+  },
+  pincodeIcon: {
+    position: 'absolute',
+    right: 12,
   },
   rowInputs: {
     flexDirection: 'row',
@@ -828,6 +1183,39 @@ const styles = StyleSheet.create({
   },
   halfWidth: {
     width: '48%',
+  },
+  suggestionsContainer: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 8,
+    marginTop: 4,
+    maxHeight: 150,
+    zIndex: 1000,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  suggestionsList: {
+    maxHeight: 150,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: '#333',
+    marginLeft: 8,
   },
   addressTypeOptions: {
     flexDirection: 'row',
