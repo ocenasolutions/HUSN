@@ -40,6 +40,12 @@ const Footer = () => {
     //   activeIcon: 'pricetag'
     // },
     {
+      name: 'Salons',
+      label: 'Salon',
+      icon: 'cut-outline',
+      activeIcon: 'cut'
+    },
+    {
       name: 'Product',
       label: 'Shop',
       icon: 'bag-handle-outline',

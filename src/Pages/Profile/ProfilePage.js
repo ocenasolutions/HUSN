@@ -283,6 +283,9 @@ const ProfilePage = ({ navigation }) => {
             color="#FF6B9D"
           />
 
+        <Text style={styles.sectionTitle}>Salon</Text>
+
+
           <ProfileOption
             icon="person-outline"
             title="Salon Out"
@@ -292,12 +295,19 @@ const ProfilePage = ({ navigation }) => {
           />
 
           <ProfileOption
-            icon="person-outline"
-            title="Salon Out"
-            subtitle="Checkout our salons"
+            icon="bookmark-outline"
+            title="Salon Bookings"
+            subtitle="Check Your Salons Bookings"
             onPress={() => navigation.navigate('UserBookingsScreen')}
             color="#FF6B9D"
           />
+          {/* <ProfileOption
+            icon="navigate-outline"
+            title="Delivery Tracking"
+            subtitle="Track Your Delivery"
+            onPress={() => navigation.navigate('DeliveryTrackingScreen')}
+            color="#FF6B9D"
+          /> */}
           {/* <ProfileOption
             icon="star-outline"
             title="Request Ride"

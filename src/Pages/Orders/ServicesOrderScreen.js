@@ -571,7 +571,7 @@ const renderOrderItem = ({ item: order }) => {
         </Text>
         <TouchableOpacity
           style={styles.shopNowButton}
-          onPress={() => navigation.navigate('MainTabs', { screen: 'Services' })}
+          onPress={() => navigation.navigate('Services')}
         >
           <Text style={styles.shopNowText}>Browse Services</Text>
         </TouchableOpacity>

@@ -86,11 +86,11 @@ const SalonDetailScreen = ({ route, navigation }) => {
     try {
       // Here you would typically make an API call to create the booking
       console.log('Booking data:', bookingData);
-      Alert.alert(
-        'Booking Confirmed!',
-        `Your appointment has been booked for ${bookingData.date} at ${bookingData.time} for ${bookingData.guestCount} guest(s).`,
-        [{ text: 'OK' }]
-      );
+      // Alert.alert(
+      //   'Booking Confirmed!',
+      //   `Your appointment has been booked for ${bookingData.date} at ${bookingData.time} for ${bookingData.guestCount} guest(s).`,
+      //   [{ text: 'OK' }]
+      // );
     } catch (error) {
       console.error('Booking error:', error);
       Alert.alert('Error', 'Failed to confirm booking. Please try again.');

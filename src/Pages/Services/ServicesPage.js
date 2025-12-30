@@ -33,20 +33,22 @@ const ServicesPage = ({ navigation }) => {
   const [newServices, setNewServices] = useState([]);
   const [offers, setOffers] = useState([]);
   const [servicesInCart, setServicesInCart] = useState(new Set());
-
+  const [banners, setBanners] = useState([]);
   const [sortBy, setSortBy] = useState('default');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showSortModal, setShowSortModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [priceRange, setPriceRange] = useState({ min: 0, max: 10000 });
   const [addingToCart, setAddingToCart] = useState(false);
+  const [selectedGender, setSelectedGender] = useState('all');
 
-  useEffect(() => {
-    fetchServices();
-    fetchCategories();
-    fetchOffers();
-    fetchCartStatus();
-  }, []);
+useEffect(() => {
+  fetchServices();
+  fetchCategories();
+  fetchOffers();
+  fetchCartStatus();
+  fetchBanners();
+}, []);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -54,9 +56,9 @@ const ServicesPage = ({ navigation }) => {
     }, [tokens])
   );
 
-  useEffect(() => {
-    applyFiltersAndSort();
-  }, [searchText, services, sortBy, selectedCategory, priceRange]);
+useEffect(() => {
+  applyFiltersAndSort();
+}, [searchText, services, sortBy, selectedCategory, priceRange, selectedGender]);
 
   const fetchCartStatus = async () => {
     if (!tokens?.accessToken) {
@@ -83,30 +85,41 @@ const ServicesPage = ({ navigation }) => {
     }
   };
 
-  const fetchServices = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`${API_URL}/services?limit=100`);
-      const data = await response.json();
+const fetchServices = async () => {
+  try {
+    setLoading(true);
+    const response = await fetch(`${API_URL}/services?limit=100`);
+    const data = await response.json();
+    
+    if (data.success) {
+      const validatedServices = data.data.filter(service => {
+        if (!service || typeof service !== 'object') {
+          console.warn('Invalid service object:', service);
+          return false;
+        }
+        if (!service._id) {
+          console.warn('Service missing _id:', service);
+          return false;
+        }
+        return true;
+      });
       
-      if (data.success) {
-        setServices(data.data);
-        groupServicesByCategory(data.data);
-        
-        const featured = data.data.filter(service => service.featured || service.is_featured);
-        const newest = data.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 6);
-        
-        setFeaturedServices(featured.slice(0, 4));
-        setNewServices(newest);
-      }
-    } catch (error) {
-      console.error('Error fetching services:', error);
-      Alert.alert('Error', 'Failed to fetch services');
-    } finally {
-      setLoading(false);
+      setServices(validatedServices);
+      groupServicesByCategory(validatedServices);
+      
+      const featured = validatedServices.filter(service => service.featured || service.is_featured);
+      const newest = validatedServices.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 6);
+      
+      setFeaturedServices(featured.slice(0, 4));
+      setNewServices(newest);
     }
-  };
-
+  } catch (error) {
+    console.error('Error fetching services:', error);
+    Alert.alert('Error', 'Failed to fetch services');
+  } finally {
+    setLoading(false);
+  }
+};
   const fetchCategories = async () => {
     try {
       const response = await fetch(`${API_URL}/services/categories`);
@@ -120,18 +133,34 @@ const ServicesPage = ({ navigation }) => {
     }
   };
 
-  const fetchOffers = async () => {
-    try {
-      const response = await fetch(`${API_URL}/offers`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setOffers(data.data.slice(0, 3));
-      }
-    } catch (error) {
-      console.error('Error fetching offers:', error);
+const fetchOffers = async () => {
+  try {
+    const response = await fetch(`${API_URL}/offers`);
+    const data = await response.json();
+    
+    if (data.success) {
+      setOffers(data.data.slice(0, 3));
     }
-  };
+  } catch (error) {
+    console.error('Error fetching offers:', error);
+  }
+};
+
+const fetchBanners = async () => {
+  try {
+    const response = await fetch(`${API_URL}/banners`);
+    const data = await response.json();
+    
+    if (data.success) {
+      const activeBanners = data.data.filter(banner => banner.isActive);
+      console.log('Active Banners:', activeBanners);
+      console.log('Banner positions:', activeBanners.map(b => ({ title: b.title, position: b.position })));
+      setBanners(activeBanners.sort((a, b) => a.order - b.order));
+    }
+  } catch (error) {
+    console.error('Error fetching banners:', error);
+  }
+};
 
   const groupServicesByCategory = (servicesData) => {
     const grouped = {};
@@ -144,41 +173,47 @@ const ServicesPage = ({ navigation }) => {
     setCategoryServices(grouped);
   };
 
-  const applyFiltersAndSort = () => {
-    let filtered = [...services];
+const applyFiltersAndSort = () => {
+  let filtered = [...services];
 
-    if (searchText.trim()) {
-      filtered = filtered.filter(service =>
-        service.name.toLowerCase().includes(searchText.toLowerCase()) ||
-        service.description.toLowerCase().includes(searchText.toLowerCase()) ||
-        service.category.toLowerCase().includes(searchText.toLowerCase())
-      );
-    }
-
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(service => service.category === selectedCategory);
-    }
-
-    filtered = filtered.filter(service => 
-      service.price >= priceRange.min && service.price <= priceRange.max
+  if (searchText.trim()) {
+    filtered = filtered.filter(service =>
+      service.name.toLowerCase().includes(searchText.toLowerCase()) ||
+      service.description.toLowerCase().includes(searchText.toLowerCase()) ||
+      service.category.toLowerCase().includes(searchText.toLowerCase())
     );
+  }
 
-    switch (sortBy) {
-      case 'price_low':
-        filtered.sort((a, b) => a.price - b.price);
-        break;
-      case 'price_high':
-        filtered.sort((a, b) => b.price - a.price);
-        break;
-      case 'name':
-        filtered.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      default:
-        break;
-    }
+  if (selectedCategory !== 'all') {
+    filtered = filtered.filter(service => service.category === selectedCategory);
+  }
 
-    setFilteredServices(filtered);
-  };
+  if (selectedGender !== 'all') {
+    filtered = filtered.filter(service => 
+      service.targetGender === selectedGender || service.targetGender === 'all'
+    );
+  }
+
+  filtered = filtered.filter(service => 
+    service.price >= priceRange.min && service.price <= priceRange.max
+  );
+
+  switch (sortBy) {
+    case 'price_low':
+      filtered.sort((a, b) => a.price - b.price);
+      break;
+    case 'price_high':
+      filtered.sort((a, b) => b.price - a.price);
+      break;
+    case 'name':
+      filtered.sort((a, b) => a.name.localeCompare(b.name));
+      break;
+    default:
+      break;
+  }
+
+  setFilteredServices(filtered);
+};
 
   const handleServicePress = (service) => {
     console.log('Service pressed:', service.name);
@@ -247,6 +282,7 @@ const ServicesPage = ({ navigation }) => {
   const clearFilters = () => {
     setSortBy('default');
     setSelectedCategory('all');
+    setSelectedGender('all');
     setPriceRange({ min: 0, max: 10000 });
     setShowFilterModal(false);
   };
@@ -476,7 +512,6 @@ const ServicesPage = ({ navigation }) => {
             </Text>
             {sortBy === 'price_high' && <Icon name="checkmark" size={20} color="#000" />}
           </TouchableOpacity>
-
           <TouchableOpacity 
             style={[styles.sortOption, sortBy === 'name' && styles.sortOptionActive]}
             onPress={() => { setSortBy('name'); setShowSortModal(false); }}
@@ -490,7 +525,6 @@ const ServicesPage = ({ navigation }) => {
       </TouchableOpacity>
     </Modal>
   );
-
   // Filter Modal
   const FilterModal = () => (
     <Modal
@@ -508,10 +542,9 @@ const ServicesPage = ({ navigation }) => {
           <View style={styles.sortModalHeader}>
             <Text style={styles.sortModalTitle}>Filters</Text>
             <TouchableOpacity onPress={() => setShowFilterModal(false)}>
-              <Icon name="close" size={24} color="#000" />
+              <Icon name="close" size={24} color="#e7e7e7ff" />
             </TouchableOpacity>
           </View>
-
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={styles.filterSectionTitle}>Category</Text>
             
@@ -522,9 +555,8 @@ const ServicesPage = ({ navigation }) => {
               <Text style={[styles.filterOptionText, selectedCategory === 'all' && styles.filterOptionTextActive]}>
                 All Categories
               </Text>
-              {selectedCategory === 'all' && <Icon name="checkmark" size={20} color="#000" />}
+              {selectedCategory === 'all' && <Icon name="checkmark" size={20}  />}
             </TouchableOpacity>
-
             {categories.map((category) => (
               <TouchableOpacity 
                 key={category}
@@ -534,10 +566,9 @@ const ServicesPage = ({ navigation }) => {
                 <Text style={[styles.filterOptionText, selectedCategory === category && styles.filterOptionTextActive]}>
                   {category.charAt(0).toUpperCase() + category.slice(1)}
                 </Text>
-                {selectedCategory === category && <Icon name="checkmark" size={20} color="#000" />}
+                {selectedCategory === category && <Icon name="checkmark" size={20}  />}
               </TouchableOpacity>
             ))}
-
             <Text style={[styles.filterSectionTitle, { marginTop: 24 }]}>Price Range</Text>
             <View style={styles.priceRangeContainer}>
               <View style={styles.priceInputContainer}>
@@ -562,8 +593,37 @@ const ServicesPage = ({ navigation }) => {
                 />
               </View>
             </View>
-          </ScrollView>
+            <Text style={[styles.filterSectionTitle, { marginTop: 24 }]}>Gender</Text>
+<TouchableOpacity 
+  style={[styles.filterOption, selectedGender === 'all' && styles.filterOptionActive]}
+  onPress={() => setSelectedGender('all')}
+>
+  <Text style={[styles.filterOptionText, selectedGender === 'all' && styles.filterOptionTextActive]}>
+    All
+  </Text>
+  {selectedGender === 'all' && <Icon name="checkmark" size={20} />}
+</TouchableOpacity>
 
+<TouchableOpacity 
+  style={[styles.filterOption, selectedGender === 'men' && styles.filterOptionActive]}
+  onPress={() => setSelectedGender('men')}
+>
+  <Text style={[styles.filterOptionText, selectedGender === 'men' && styles.filterOptionTextActive]}>
+    Men
+  </Text>
+  {selectedGender === 'men' && <Icon name="checkmark" size={20}  />}
+</TouchableOpacity>
+
+<TouchableOpacity 
+  style={[styles.filterOption, selectedGender === 'women' && styles.filterOptionActive]}
+  onPress={() => setSelectedGender('women')}
+>
+  <Text style={[styles.filterOptionText, selectedGender === 'women' && styles.filterOptionTextActive]}>
+    Women
+  </Text>
+  {selectedGender === 'women' && <Icon name="checkmark" size={20} />}
+</TouchableOpacity>
+          </ScrollView>
           <View style={styles.filterFooter}>
             <TouchableOpacity 
               style={styles.clearButton}
@@ -582,6 +642,61 @@ const ServicesPage = ({ navigation }) => {
       </TouchableOpacity>
     </Modal>
   );
+
+const BannersSection = () => {
+  if (banners.length === 0) return null;
+
+  return (
+    <View style={styles.bannersSection}>
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        pagingEnabled
+        snapToInterval={width - 40}
+        decelerationRate="fast"
+        contentContainerStyle={styles.bannersScroll}
+      >
+        {banners.map((banner) => (
+          <TouchableOpacity
+            key={banner._id}
+            style={styles.posterBannerCard}
+            onPress={() => {
+              if (banner.link) {
+                console.log('Navigate to:', banner.link);
+              }
+            }}
+            activeOpacity={0.95}
+          >
+            <Image
+              source={{ uri: banner.image_url || 'https://via.placeholder.com/350x400' }}
+              style={styles.posterBannerImage}
+              resizeMode="cover"
+            />
+            <View style={styles.posterOverlay}>
+              {banner.title && (
+                <Text style={styles.posterTitle}>{banner.title}</Text>
+              )}
+              {banner.description && (
+                <Text style={styles.posterDescription} numberOfLines={2}>
+                  {banner.description}
+                </Text>
+              )}
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      
+      {banners.length > 1 && (
+        <View style={styles.bannerIndicators}>
+          {banners.map((_, index) => (
+            <View key={index} style={styles.bannerIndicator} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+};
+
 
   // Featured Services Section
   const FeaturedServicesSection = () => {
@@ -681,44 +796,44 @@ const ServicesPage = ({ navigation }) => {
     );
   };
 
-  // Recommended Section
-  const RecommendedSection = () => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Recommended for You</Text>
-      
-      <View style={styles.recommendedGrid}>
-        {services.slice(0, 2).map((service) => (
-          <View key={service._id} style={styles.recommendedCard}>
-            <TouchableOpacity onPress={() => handleServicePress(service)}>
-              <Image
-                source={{ uri: service.image_url || 'https://via.placeholder.com/170x140' }}
-                style={styles.recommendedImage}
-                resizeMode="cover"
-              />
-              <View style={styles.recommendedContent}>
-                <Text style={styles.recommendedTitle} numberOfLines={1}>
-                  {service.name}
-                </Text>
-                
-                {service.rating && service.rating > 0 && (
-                  <View style={styles.recommendedRating}>
-                    <View style={styles.starsContainer}>
-                      {renderStars(service.rating)}
-                    </View>
-                    <Text style={styles.recommendedRatingText}>
-                      {service.rating.toFixed(1)}
-                    </Text>
+// Recommended Section - Fixed Version
+const RecommendedSection = () => (
+  <View style={styles.section}>
+    <Text style={styles.sectionTitle}>Recommended for You</Text>
+    
+    <View style={styles.recommendedGrid}>
+      {services.slice(0, 2).map((service) => (
+        <View key={service._id} style={styles.recommendedCard}>
+          <TouchableOpacity onPress={() => handleServicePress(service)}>
+            <Image
+              source={{ uri: service.image_url || 'https://via.placeholder.com/170x140' }}
+              style={styles.recommendedImage}
+              resizeMode="cover"
+            />
+            <View style={styles.recommendedContent}>
+              <Text style={styles.recommendedTitle} numberOfLines={1}>
+                {service.name || 'Unnamed Service'}
+              </Text>
+              
+              {service.rating && service.rating > 0 && (
+                <View style={styles.recommendedRating}>
+                  <View style={styles.starsContainer}>
+                    {renderStars(service.rating)}
                   </View>
-                )}
-              </View>
-            </TouchableOpacity>
-            
-            <QuickAddButton service={service} style={styles.recommendedQuickAdd} />
-          </View>
-        ))}
-      </View>
+                  <Text style={styles.recommendedRatingText}>
+                    {service.rating.toFixed(1)}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
+          
+          <QuickAddButton service={service} style={styles.recommendedQuickAdd} />
+        </View>
+      ))}
     </View>
-  );
+  </View>
+);
 
   // Top Categories Section
   const TopCategoriesSection = () => (
@@ -753,79 +868,263 @@ const ServicesPage = ({ navigation }) => {
       
       <View style={styles.newServicesGrid}>
         {newServices.slice(0, 4).map((service) => (
-          <TouchableOpacity
-            key={service._id}
-            style={styles.newServiceCard}
-            onPress={() => handleServicePress(service)}
-          >
-            <Image
-              source={{ uri: service.image_url || 'https://via.placeholder.com/60x60' }}
-              style={styles.newServiceIcon}
-              resizeMode="cover"
-            />
-            <Text style={styles.newServiceTitle} numberOfLines={1}>
-              {service.name}
-            </Text>
-            
-            <QuickAddButton service={service} style={styles.newServiceQuickAdd} />
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
+<TouchableOpacity
+key={service._id}
+style={styles.newServiceCard}
+onPress={() => handleServicePress(service)}
+>
+<Image
+source={{ uri: service.image_url || 'https://via.placeholder.com/60x60' }}
+style={styles.newServiceIcon}
+resizeMode="cover"
+/>
+<Text style={styles.newServiceTitle} numberOfLines={1}>
+{service.name}
+</Text>
+    <QuickAddButton service={service} style={styles.newServiceQuickAdd} />
+  </TouchableOpacity>
+))}
+  </View>
+</View>
+);
+// All Services Banner Section (before All Services)
+const AllServicesBannerSection = () => {
+if (banners.length === 0) return null;
+// Get a random banner for the All Services section
+const randomBanner = banners[Math.floor(Math.random() * banners.length)];
+return (
+<View style={styles.allServicesBannerSection}>
+<TouchableOpacity
+style={styles.allServicesBannerCard}
+onPress={() => {
+if (randomBanner.link) {
+console.log('Navigate to:', randomBanner.link);
+}
+}}
+activeOpacity={0.95}
+>
+<Image
+source={{ uri: randomBanner.image_url || 'https://via.placeholder.com/350x200' }}
+style={styles.allServicesBannerImage}
+resizeMode="cover"
+/>
+<View style={styles.allServicesBannerOverlay}>
+{randomBanner.title && (
+<Text style={styles.allServicesBannerTitle}>{randomBanner.title}</Text>
+)}
+{randomBanner.description && (
+<Text style={styles.allServicesBannerDescription} numberOfLines={2}>
+{randomBanner.description}
+</Text>
+)}
+</View>
+</TouchableOpacity>
+</View>
+);
+};
+const AllServicesSection = () => {
+  // Function to randomly insert banners
+  const getRandomBannerPositions = () => {
+    if (banners.length === 0 || filteredServices.length === 0) return [];
+    const positions = [];
+    const totalServices = filteredServices.length;
+    const numberOfBannersToShow = Math.min(banners.length, Math.floor(totalServices / 4));
+    
+    // Generate random positions
+    for (let i = 0; i < numberOfBannersToShow; i++) {
+      const randomPos = Math.floor(Math.random() * (totalServices - 1)) + 1;
+      if (!positions.includes(randomPos)) {
+        positions.push(randomPos);
+      }
+    }
+    return positions.sort((a, b) => a - b);
+  };
 
-  // All Services Section
-  const AllServicesSection = () => (
+  const [bannerPositions] = useState(() => getRandomBannerPositions());
+  const [usedBanners] = useState(() => {
+    // Shuffle banners for random display
+    return [...banners].sort(() => Math.random() - 0.5);
+  });
+
+  return (
     <View style={styles.section}>
       <View style={styles.allServicesHeader}>
-        <Text style={styles.sectionTitle}>All Services ({filteredServices.length})</Text>
+        <Text style={styles.sectionTitle}>
+          All Services ({filteredServices.length})
+        </Text>
       </View>
-      
+
+      {/* Gender Filter Pills */}
+      <View style={styles.genderFilterContainer}>
+        <TouchableOpacity
+          style={[
+            styles.genderPill,
+            selectedGender === 'all' && styles.genderPillActive
+          ]}
+          onPress={() => setSelectedGender('all')}
+        >
+          <Icon
+            name="people"
+            size={18}
+            color={selectedGender === 'all' ? '#FFF' : '#666'}
+          />
+          <Text style={[
+            styles.genderPillText,
+            selectedGender === 'all' && styles.genderPillTextActive
+          ]}>
+            All
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.genderPill,
+            selectedGender === 'men' && styles.genderPillActive
+          ]}
+          onPress={() => setSelectedGender('men')}
+        >
+          <Icon 
+            name="man" 
+            size={18} 
+            color={selectedGender === 'men' ? '#FFF' : '#666'} 
+          />
+          <Text style={[
+            styles.genderPillText,
+            selectedGender === 'men' && styles.genderPillTextActive
+          ]}>
+            Men
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.genderPill,
+            selectedGender === 'women' && styles.genderPillActive
+          ]}
+          onPress={() => setSelectedGender('women')}
+        >
+          <Icon 
+            name="woman" 
+            size={18} 
+            color={selectedGender === 'women' ? '#FFF' : '#666'} 
+          />
+          <Text style={[
+            styles.genderPillText,
+            selectedGender === 'women' && styles.genderPillTextActive
+          ]}>
+            Women
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.allServicesList}>
-        {filteredServices.map((service) => (
-          <TouchableOpacity
-            key={service._id}
-            style={styles.listServiceCard}
-            onPress={() => handleServicePress(service)}
-          >
-            <Image 
-              source={{ uri: service.image_url || 'https://via.placeholder.com/80x80' }} 
-              style={styles.listServiceImage}
-              resizeMode="cover"
-            />
-            <View style={styles.listServiceInfo}>
-              <Text style={styles.listServiceName} numberOfLines={2}>
-                {service.name}
-              </Text>
-              <Text style={styles.listServiceCategory}>
-                {service.category}
-              </Text>
-              
-              {service.rating && service.rating > 0 && (
-                <View style={styles.listServiceRating}>
-                  <View style={styles.starsContainer}>
-                    {renderStars(service.rating)}
+        {filteredServices.map((service, index) => {
+          const bannerIndex = bannerPositions.indexOf(index);
+          const shouldShowBanner = bannerIndex !== -1;
+          const bannerToShow = shouldShowBanner ? usedBanners[bannerIndex % usedBanners.length] : null;
+
+          return (
+            <React.Fragment key={service._id}>
+              <TouchableOpacity
+                style={styles.listServiceCard}
+                onPress={() => handleServicePress(service)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.serviceCardImageContainer}>
+                  <Image 
+                    source={{ uri: service.image_url || 'https://via.placeholder.com/100x100' }} 
+                    style={styles.listServiceImage}
+                    resizeMode="cover"
+                  />
+                  {service.targetGender && service.targetGender !== 'all' && (
+                    <View style={styles.genderBadge}>
+                      <Icon 
+                        name={service.targetGender === 'men' ? 'man' : 'woman'} 
+                        size={12} 
+                        color="#FFF" 
+                      />
+                    </View>
+                  )}
+                </View>
+                
+                <View style={styles.listServiceInfo}>
+                  <View style={styles.serviceHeader}>
+                    <Text style={styles.listServiceName} numberOfLines={2}>
+                      {service.name || 'Unnamed Service'}
+                    </Text>
+                    <View style={styles.categoryTag}>
+                      <Text style={styles.listServiceCategory}>
+                        {service.category || 'General'}
+                      </Text>
+                    </View>
                   </View>
-                  <Text style={styles.ratingCount}>
-                    ({service.reviewCount || 0})
-                  </Text>
+                  
+                  {service.rating && service.rating > 0 && (
+                    <View style={styles.listServiceRating}>
+                      <View style={styles.starsContainer}>
+                        {renderStars(service.rating)}
+                      </View>
+                      <Text style={styles.ratingCount}>
+                        ({service.reviewCount || 0})
+                      </Text>
+                    </View>
+                  )}
+                  
+                  <View style={styles.listServiceFooter}>
+                    <View style={styles.priceContainer}>
+                      <Text style={styles.listServicePrice}>
+                        ₹{service.price || 0}
+                      </Text>
+                      {service.duration && (
+                        <View style={styles.durationBadge}>
+                          <Icon name="time-outline" size={12} color="#666" />
+                          <Text style={styles.durationText}>
+                            {service.duration}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </View>
+                
+                <QuickAddButton service={service} style={styles.listQuickAdd} />
+              </TouchableOpacity>
+
+              {/* Random Banner Insertion */}
+              {shouldShowBanner && bannerToShow && (
+                <View style={styles.inlineBannerContainer}>
+                  <TouchableOpacity
+                    style={styles.inlinePosterCard}
+                    onPress={() => {
+                      if (bannerToShow.link) {
+                        console.log('Navigate to:', bannerToShow.link);
+                      }
+                    }}
+                    activeOpacity={0.95}
+                  >
+                    <Image
+                      source={{ uri: bannerToShow.image_url || 'https://via.placeholder.com/350x400' }}
+                      style={styles.posterBannerImage}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.posterOverlay}>
+                      {bannerToShow.title && (
+                        <Text style={styles.posterTitle}>
+                          {bannerToShow.title}
+                        </Text>
+                      )}
+                      {bannerToShow.description && (
+                        <Text style={styles.posterDescription} numberOfLines={2}>
+                          {bannerToShow.description}
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
                 </View>
               )}
-              
-              <View style={styles.listServiceFooter}>
-                <Text style={styles.listServicePrice}>₹{service.price}</Text>
-                {service.duration && (
-                  <View style={styles.durationBadge}>
-                    <Icon name="time-outline" size={12} color="#666" />
-                    <Text style={styles.durationText}>{service.duration}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-            
-            <QuickAddButton service={service} style={styles.listQuickAdd} />
-          </TouchableOpacity>
-        ))}
+            </React.Fragment>
+          );
+        })}
       </View>
 
       {filteredServices.length === 0 && (
@@ -839,727 +1138,921 @@ const ServicesPage = ({ navigation }) => {
       )}
     </View>
   );
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <Header />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#000" />
-          <Text style={styles.loadingText}>Loading services...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const totalCartItems = servicesInCart.size;
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <Header />   
-      
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Icon name="search" size={20} color="#999" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search for services"
-            value={searchText}
-            onChangeText={setSearchText}
-            placeholderTextColor="#999"
-          />
+};
+if (loading) {
+return (
+<SafeAreaView style={styles.container}>
+<Header />
+<View style={styles.loadingContainer}>
+<ActivityIndicator size="large" color="#000" />
+<Text style={styles.loadingText}>Loading services...</Text>
+</View>
+</SafeAreaView>
+);
+}
+const totalCartItems = servicesInCart.size;
+return (
+<SafeAreaView style={styles.container}>
+<Header />
+  <View style={styles.searchContainer}>
+    <View style={styles.searchBar}>
+      <Icon name="search" size={20} color="#999" />
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Search for services"
+        value={searchText}
+        onChangeText={setSearchText}
+        placeholderTextColor="#999"
+      />
+    </View>
+  </View>
+  <View style={styles.filterBar}>
+    <TouchableOpacity 
+      style={styles.filterButton}
+      onPress={() => setShowSortModal(true)}
+    >
+      <Icon name="swap-vertical" size={18} color="#000" />
+      <Text style={styles.filterButtonText}>Sort</Text>
+    </TouchableOpacity>
+<TouchableOpacity 
+  style={[
+    styles.filterButton, 
+    (selectedCategory !== 'all' || selectedGender !== 'all' || priceRange.min !== 0 || priceRange.max !== 10000) && styles.filterButtonActive
+  ]}
+  onPress={() => setShowFilterModal(true)}
+>
+  <Icon name="options" size={18} color="#000" />
+  <Text style={styles.filterButtonText}>Filter</Text>
+  {(selectedCategory !== 'all' || selectedGender !== 'all' || priceRange.min !== 0 || priceRange.max !== 10000) && (
+    <View style={styles.filterBadge} />
+  )}
+</TouchableOpacity>
+  </View>
+<ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+  {/* Top Banners */}
+  <BannersSection />
+{!searchText.trim() && (
+<>
+<FeaturedServicesSection />
+<PopularCategoriesSection />
+<SpecialOffersSection />
+<RecommendedSection />
+<TopCategoriesSection />
+<NewServicesSection />
+</>
+)}
+{/* All Services with Banner Before and Random Inline Banners */}
+<AllServicesBannerSection />
+<AllServicesSection />
+  <View style={styles.bottomSpacing} />
+</ScrollView>
+  {/* Floating Cart Button */}
+  {totalCartItems > 0 && !showSortModal && !showFilterModal && (
+    <TouchableOpacity
+      style={styles.floatingCartButton}
+      onPress={() => navigation.navigate('ViewCart')}
+      activeOpacity={0.9}
+    >
+      <View style={styles.cartButtonContent}>
+        <Text style={styles.cartButtonText}>View Cart</Text>
+        <View style={{ position: 'relative' }}>
+          <Icon name="cart" size={24} color="#D76D77" />
+          <Text style={styles.cartBadgeText}>{totalCartItems}</Text>
         </View>
       </View>
-
-      <View style={styles.filterBar}>
-        <TouchableOpacity 
-          style={styles.filterButton}
-          onPress={() => setShowSortModal(true)}
-        >
-          <Icon name="swap-vertical" size={18} color="#000" />
-          <Text style={styles.filterButtonText}>Sort</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.filterButton, (selectedCategory !== 'all' || priceRange.min !== 0 || priceRange.max !== 10000) && styles.filterButtonActive]}
-          onPress={() => setShowFilterModal(true)}
-        >
-          <Icon name="options" size={18} color="#000" />
-          <Text style={styles.filterButtonText}>Filter</Text>
-          {(selectedCategory !== 'all' || priceRange.min !== 0 || priceRange.max !== 10000) && (
-            <View style={styles.filterBadge} />
-          )}
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-        {!searchText.trim() && (
-          <>
-            <FeaturedServicesSection />
-            <PopularCategoriesSection />
-            <SpecialOffersSection />
-            <RecommendedSection />
-            <TopCategoriesSection />
-            <NewServicesSection />
-          </>
-        )}
-        
-        <AllServicesSection />
-        
-        <View style={styles.bottomSpacing} />
-      </ScrollView>
-
-      {/* Floating Cart Button */}
-      {totalCartItems > 0 && !showSortModal && !showFilterModal && (
-        <TouchableOpacity
-          style={styles.floatingCartButton}
-          onPress={() => navigation.navigate('ViewCart')}
-          activeOpacity={0.9}
-        >
-          <View style={styles.cartButtonContent}>
-            <Text style={styles.cartButtonText}>View Cart</Text>
-            <View style={{ position: 'relative' }}>
-              <Icon name="cart" size={24} color="#D76D77" />
-              <Text style={styles.cartBadgeText}>{totalCartItems}</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      )}
-      
-      {/* Modals */}
-      <SortModal />
-      <FilterModal />
-    </SafeAreaView>
-  );
+    </TouchableOpacity>
+  )}
+{/* Modals */}
+<SortModal />
+<FilterModal />
+</SafeAreaView>
+);
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  searchContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    backgroundColor: '#FFFFFF',
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 10,
-    fontSize: 15,
-    color: '#000',
-  },
-  filterBar: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    gap: 12,
-  },
-  filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 6,
-  },
-  filterButtonActive: {
-    backgroundColor: '#000',
-  },
-  filterButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-  },
-  filterBadge: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FF3B30',
-    marginLeft: 4,
-  },
-  quickAddButton: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FF6B9D',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  quickAddText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFF',
-    marginLeft: 4,
-  },
-  quantityControl: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FF6B9D',
-    borderRadius: 20,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  quantityButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  quantityButtonDisabled: {
-    opacity: 0.5,
-  },
-  quantityButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFF',
-    lineHeight: 20,
-  },
-  quantityText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFF',
-    marginHorizontal: 12,
-    minWidth: 20,
-    textAlign: 'center',
-  },
-  sortModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  sortModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    maxHeight: '60%',
-  },
-  sortModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  sortModalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000',
-  },
-  sortOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  sortOptionActive: {
-    backgroundColor: '#F5F5F5',
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  sortOptionText: {
-    fontSize: 15,
-    color: '#666',
-  },
-  sortOptionTextActive: {
-    color: '#000',
-    fontWeight: '600',
-  },
-  filterSectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 12,
-  },
-  filterOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  filterOptionActive: {
-    backgroundColor: '#F5F5F5',
-  },
-  filterOptionText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  filterOptionTextActive: {
-    color: '#000',
-    fontWeight: '600',
-  },
-  priceRangeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  priceInputContainer: {
-    flex: 1,
-  },
-  priceLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
-  },
-  priceInput: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#000',
-  },
-  priceSeparator: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 20,
-  },
-  filterFooter: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 20,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-  },
-  clearButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    alignItems: 'center',
-  },
-  clearButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#666',
-  },
-  applyButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 8,
-    backgroundColor: '#000',
-    alignItems: 'center',
-  },
-  applyButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FFF',
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 16,
-    paddingHorizontal: 20,
-  },
-  featuredGrid: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 20,
-  },
-  featuredCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
-  },
-  featuredImage: {
-    width: '100%',
-    height: 140,
-    backgroundColor: '#F5F5F5',
-  },
-  featuredContent: {
-    padding: 12,
-    paddingBottom: 48,
-  },
-  featuredTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-  },
-  featuredRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  featuredRatingText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2C3E50',
-    marginLeft: 6,
-  },
-  featuredQuickAdd: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-  },
-  starsContainer: {
-    flexDirection: 'row',
-    marginRight: 8,
-  },
-  categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    paddingHorizontal: 20,
-  },
-  categoryCard: {
-    width: (width - 52) / 2,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  categoryIcon: {
-    width: 140,
-    height: 80,
-    borderRadius: 20,
-    marginBottom: 12,
-    backgroundColor: '#E0E0E0',
-  },
-  categoryTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-    textAlign: 'center',
-  },
-  offerCard: {
-    flexDirection: 'row',
-    backgroundColor: '#000',
-    borderRadius: 16,
-    overflow: 'hidden',
-    padding: 20,
-    marginHorizontal: 20,
-  },
-  offerContent: {
-    flex: 1,
-    justifyContent: 'space-between',
-  },
-  offerLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFD700',
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  offerDiscount: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFF',
-    marginBottom: 8,
-  },
-  offerDescription: {
-    fontSize: 13,
-    color: '#CCC',
-    marginBottom: 16,
-  },
-  bookNowButton: {
-    backgroundColor: '#FFF',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
-  bookNowText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-  },
-  offerImage: {
-    width: 120,
-    height: 140,
-    borderRadius: 12,
-    marginLeft: 16,
-    backgroundColor: '#333',
-  },
-  recommendedGrid: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 20,
-  },
-  recommendedCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
-  },
-  recommendedImage: {
-    width: '100%',
-    height: 140,
-    backgroundColor: '#F5F5F5',
-  },
-  recommendedContent: {
-    padding: 12,
-    paddingBottom: 48,
-  },
-  recommendedTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-  },
-  recommendedRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  recommendedRatingText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2C3E50',
-    marginLeft: 6,
-  },
-  recommendedQuickAdd: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-  },
-  topCategoriesGrid: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 20,
-  },
-  topCategoryCard: {
-    flex: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#F5F5F5',
-  },
-  topCategoryImage: {
-    width: '100%',
-    height: 120,
-    backgroundColor: '#E0E0E0',
-  },
-  topCategoryTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-    padding: 12,
-    textAlign: 'center',
-  },
-  newServicesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    paddingHorizontal: 20,
-  },
-  newServiceCard: {
-    width: (width - 52) / 2,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    position: 'relative',
-  },
-  newServiceIcon: {
-    width: 150,
-    height: 60,
-    borderRadius: 30,
-    marginBottom: 12,
-    backgroundColor: '#E0E0E0',
-  },
-  newServiceTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#000',
-    textAlign: 'center',
-    marginBottom: 36,
-  },
-  newServiceQuickAdd: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-  },
-  allServicesHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  allServicesList: {
-    gap: 12,
-    paddingHorizontal: 20,
-  },
-  listServiceCard: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
-    padding: 12,
-  },
-  listServiceImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    backgroundColor: '#F5F5F5',
-  },
-  listServiceInfo: {
-    flex: 1,
-    marginLeft: 12,
-    justifyContent: 'space-between',
-  },
-  listServiceName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-  },
-  listServiceCategory: {
-    fontSize: 12,
-    color: '#666',
-    textTransform: 'capitalize',
-    marginBottom: 8,
-  },
-  listServiceRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  ratingCount: {
-    fontSize: 12,
-    color: '#7F8C8D',
-    marginLeft: 6,
-  },
-  listServiceFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  listServicePrice: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#000',
-  },
-  durationBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F5F5F5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  durationText: {
-    fontSize: 11,
-    color: '#666',
-  },
-  listQuickAdd: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 15,
-    color: '#666',
-  },
-  bottomSpacing: {
-    height: 80,
-  },
-  floatingCartButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,    
-    width: 150,
-    height: 45,
-    backgroundColor: '#F5C6CB',
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-    zIndex: 1000,
-  },
-  cartButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cartBadgeText: {
-    position: 'absolute',
-    top: -6,
-    right: -5,
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#D76D77',
-  },
-  cartButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#D76D77',
-    left: -10,
-    marginLeft: 12,
-  },
+container: {
+flex: 1,
+backgroundColor: '#FFFFFF',
+},
+scrollContainer: {
+flex: 1,
+},
+searchContainer: {
+paddingHorizontal: 20,
+paddingBottom: 12,
+backgroundColor: '#FFFFFF',
+},
+searchBar: {
+flexDirection: 'row',
+alignItems: 'center',
+backgroundColor: '#F5F5F5',
+borderRadius: 12,
+paddingHorizontal: 16,
+paddingVertical: 12,
+},
+searchInput: {
+flex: 1,
+marginLeft: 10,
+fontSize: 15,
+color: '#000',
+},
+filterBar: {
+flexDirection: 'row',
+paddingHorizontal: 20,
+paddingBottom: 16,
+gap: 12,
+},
+filterButton: {
+flexDirection: 'row',
+alignItems: 'center',
+backgroundColor: '#F5F5F5',
+paddingHorizontal: 16,
+paddingVertical: 10,
+borderRadius: 8,
+gap: 6,
+},
+filterButtonActive: {
+backgroundColor: '#000',
+},
+filterButtonText: {
+fontSize: 14,
+fontWeight: '600',
+color: '#000',
+},
+filterBadge: {
+width: 8,
+height: 8,
+borderRadius: 4,
+backgroundColor: '#FF3B30',
+marginLeft: 4,
+},
+quickAddButton: {
+position: 'absolute',
+bottom: 8,
+right: 8,
+flexDirection: 'row',
+alignItems: 'center',
+backgroundColor: '#FF6B9D',
+paddingVertical: 6,
+paddingHorizontal: 12,
+borderRadius: 20,
+shadowColor: '#000',
+shadowOffset: { width: 0, height: 2 },
+shadowOpacity: 0.2,
+shadowRadius: 4,
+elevation: 4,
+},
+quickAddText: {
+fontSize: 14,
+fontWeight: '600',
+color: '#FFF',
+marginLeft: 4,
+},
+quantityControl: {
+flexDirection: 'row',
+alignItems: 'center',
+backgroundColor: '#FF6B9D',
+borderRadius: 20,
+paddingHorizontal: 4,
+paddingVertical: 2,
+position: 'absolute',
+bottom: 8,
+right: 8,
+shadowColor: '#000',
+shadowOffset: { width: 0, height: 2 },
+shadowOpacity: 0.2,
+shadowRadius: 4,
+elevation: 4,
+},
+quantityButton: {
+width: 28,
+height: 28,
+borderRadius: 14,
+backgroundColor: 'rgba(255, 255, 255, 0.3)',
+justifyContent: 'center',
+alignItems: 'center',
+},
+quantityButtonDisabled: {
+opacity: 0.5,
+},
+quantityButtonText: {
+fontSize: 18,
+fontWeight: '600',
+color: '#FFF',
+lineHeight: 20,
+},
+quantityText: {
+fontSize: 14,
+fontWeight: '600',
+color: '#FFF',
+marginHorizontal: 12,
+minWidth: 20,
+textAlign: 'center',
+},
+sortModalOverlay: {
+flex: 1,
+backgroundColor: 'rgba(0, 0, 0, 0.5)',
+justifyContent: 'flex-end',
+},
+sortModalContent: {
+backgroundColor: '#FFFFFF',
+borderTopLeftRadius: 24,
+borderTopRightRadius: 24,
+padding: 20,
+maxHeight: '60%',
+},
+sortModalHeader: {
+flexDirection: 'row',
+justifyContent: 'space-between',
+alignItems: 'center',
+marginBottom: 20,
+},
+sortModalTitle: {
+fontSize: 20,
+fontWeight: '700',
+// color: '#ffffffff',
+},
+sortOption: {
+flexDirection: 'row',
+justifyContent: 'space-between',
+alignItems: 'center',
+paddingVertical: 16,
+borderBottomWidth: 1,
+borderBottomColor: '#F0F0F0',
+},
+sortOptionActive: {
+backgroundColor: '#F5F5F5',
+paddingHorizontal: 12,
+borderRadius: 8,
+},
+sortOptionText: {
+fontSize: 15,
+color: '#666',
+},
+sortOptionTextActive: {
+color: '#000',
+fontWeight: '600',
+},
+filterSectionTitle: {
+fontSize: 16,
+fontWeight: '700',
+color: '#000',
+marginBottom: 12,
+},
+filterOption: {
+flexDirection: 'row',
+justifyContent: 'space-between',
+alignItems: 'center',
+paddingVertical: 12,
+paddingHorizontal: 12,
+borderRadius: 8,
+marginBottom: 8,
+},
+filterOptionActive: {
+backgroundColor: '#F5F5F5',
+},
+filterOptionText: {
+fontSize: 14,
+color: '#666',
+},
+filterOptionTextActive: {
+color: '#000',
+fontWeight: '600',
+},
+priceRangeContainer: {
+flexDirection: 'row',
+alignItems: 'center',
+gap: 12,
+},
+priceInputContainer: {
+flex: 1,
+},
+priceLabel: {
+fontSize: 12,
+color: '#666',
+marginBottom: 4,
+},
+priceInput: {
+backgroundColor: '#F5F5F5',
+borderRadius: 8,
+paddingHorizontal: 12,
+paddingVertical: 10,
+fontSize: 14,
+color: '#000',
+},
+priceSeparator: {
+fontSize: 16,
+color: '#666',
+marginTop: 20,
+},
+filterFooter: {
+flexDirection: 'row',
+gap: 12,
+marginTop: 20,
+paddingTop: 16,
+borderTopWidth: 1,
+borderTopColor: '#F0F0F0',
+},
+clearButton: {
+flex: 1,
+paddingVertical: 14,
+borderRadius: 8,
+borderWidth: 1,
+borderColor: '#E0E0E0',
+alignItems: 'center',
+},
+clearButtonText: {
+fontSize: 15,
+fontWeight: '600',
+color: '#666',
+},
+applyButton: {
+flex: 1,
+paddingVertical: 14,
+borderRadius: 8,
+backgroundColor: '#000',
+alignItems: 'center',
+},
+applyButtonText: {
+fontSize: 15,
+fontWeight: '600',
+color: '#FFF',
+},
+section: {
+marginBottom: 24,
+},
+sectionTitle: {
+fontSize: 18,
+fontWeight: '700',
+color: '#000',
+marginBottom: 16,
+paddingHorizontal: 20,
+},
+featuredGrid: {
+flexDirection: 'row',
+gap: 12,
+paddingHorizontal: 20,
+},
+featuredCard: {
+flex: 1,
+backgroundColor: '#FFFFFF',
+borderRadius: 12,
+overflow: 'hidden',
+borderWidth: 1,
+borderColor: '#F0F0F0',
+},
+featuredImage: {
+width: '100%',
+height: 140,
+backgroundColor: '#F5F5F5',
+},
+featuredContent: {
+padding: 12,
+paddingBottom: 48,
+},
+featuredTitle: {
+fontSize: 14,
+fontWeight: '600',
+color: '#000',
+},
+featuredRating: {
+flexDirection: 'row',
+alignItems: 'center',
+marginTop: 6,
+},
+featuredRatingText: {
+fontSize: 12,
+fontWeight: '600',
+color: '#2C3E50',
+marginLeft: 6,
+},
+featuredQuickAdd: {
+position: 'absolute',
+bottom: 8,
+right: 8,
+},
+starsContainer: {
+flexDirection: 'row',
+marginRight: 8,
+},
+categoriesGrid: {
+flexDirection: 'row',
+flexWrap: 'wrap',
+gap: 12,
+paddingHorizontal: 20,
+},
+categoryCard: {
+width: (width - 52) / 2,
+backgroundColor: '#F5F5F5',
+borderRadius: 12,
+padding: 16,
+alignItems: 'center',
+},
+categoryIcon: {
+width: 140,
+height: 80,
+borderRadius: 20,
+marginBottom: 12,
+backgroundColor: '#E0E0E0',
+},
+categoryTitle: {
+fontSize: 14,
+fontWeight: '600',
+color: '#000',
+textAlign: 'center',
+},
+offerCard: {
+flexDirection: 'row',
+backgroundColor: '#000',
+borderRadius: 16,
+overflow: 'hidden',
+padding: 20,
+marginHorizontal: 20,
+},
+offerContent: {
+flex: 1,
+justifyContent: 'space-between',
+},
+offerLabel: {
+fontSize: 12,
+fontWeight: '600',
+color: '#FFD700',
+textTransform: 'uppercase',
+marginBottom: 8,
+},
+offerDiscount: {
+fontSize: 20,
+fontWeight: '700',
+color: '#FFF',
+marginBottom: 8,
+},
+offerDescription: {
+fontSize: 13,
+color: '#CCC',
+marginBottom: 16,
+},
+bookNowButton: {
+backgroundColor: '#FFF',
+paddingVertical: 10,
+paddingHorizontal: 20,
+borderRadius: 8,
+alignSelf: 'flex-start',
+},
+bookNowText: {
+fontSize: 14,
+fontWeight: '600',
+color: '#000',
+},
+offerImage: {
+width: 120,
+height: 140,
+borderRadius: 12,
+marginLeft: 16,
+backgroundColor: '#333',
+},
+recommendedGrid: {
+flexDirection: 'row',
+gap: 12,
+paddingHorizontal: 20,
+},
+recommendedCard: {
+flex: 1,
+backgroundColor: '#FFFFFF',
+borderRadius: 12,
+overflow: 'hidden',
+borderWidth: 1,
+borderColor: '#F0F0F0',
+},
+recommendedImage: {
+width: '100%',
+height: 140,
+backgroundColor: '#F5F5F5',
+},
+recommendedContent: {
+padding: 12,
+paddingBottom: 48,
+},
+recommendedTitle: {
+fontSize: 14,
+fontWeight: '600',
+color: '#000',
+},
+recommendedRating: {
+flexDirection: 'row',
+alignItems: 'center',
+marginTop: 6,
+},
+recommendedRatingText: {
+fontSize: 12,
+fontWeight: '600',
+color: '#2C3E50',
+marginLeft: 6,
+},
+recommendedQuickAdd: {
+position: 'absolute',
+bottom: 8,
+right: 8,
+},
+topCategoriesGrid: {
+flexDirection: 'row',
+gap: 12,
+paddingHorizontal: 20,
+},
+topCategoryCard: {
+flex: 1,
+borderRadius: 12,
+overflow: 'hidden',
+backgroundColor: '#F5F5F5',
+},
+topCategoryImage: {
+width: '100%',
+height: 120,
+backgroundColor: '#E0E0E0',
+},
+topCategoryTitle: {
+fontSize: 14,
+fontWeight: '600',
+color: '#000',
+padding: 12,
+textAlign: 'center',
+},
+newServicesGrid: {
+flexDirection: 'row',
+flexWrap: 'wrap',
+gap: 12,
+paddingHorizontal: 20,
+},
+newServiceCard: {
+width: (width - 52) / 2,
+backgroundColor: '#F5F5F5',
+borderRadius: 12,
+padding: 12,
+alignItems: 'center',
+position: 'relative',
+},
+newServiceIcon: {
+width: 150,
+height: 60,
+borderRadius: 30,
+marginBottom: 12,
+backgroundColor: '#E0E0E0',
+},
+newServiceTitle: {
+fontSize: 13,
+fontWeight: '600',
+color: '#000',
+textAlign: 'center',
+marginBottom: 36,
+},
+newServiceQuickAdd: {
+position: 'absolute',
+bottom: 8,
+right: 8,
+},
+allServicesHeader: {
+flexDirection: 'row',
+justifyContent: 'space-between',
+alignItems: 'center',
+marginBottom: 16,
+},
+genderFilterContainer: {
+flexDirection: 'row',
+paddingHorizontal: 20,
+marginBottom: 20,
+gap: 10,
+},
+genderPill: {
+flex: 1,
+flexDirection: 'row',
+alignItems: 'center',
+justifyContent: 'center',
+backgroundColor: '#F5F5F5',
+paddingVertical: 12,
+paddingHorizontal: 16,
+borderRadius: 12,
+gap: 8,
+borderWidth: 2,
+borderColor: 'transparent',
+},
+genderPillActive: {
+backgroundColor: '#FF6B9D',
+borderColor: '#FF6B9D',
+},
+genderPillText: {
+fontSize: 14,
+fontWeight: '600',
+color: '#666',
+},
+genderPillTextActive: {
+color: '#FFFFFF',
+},
+allServicesList: {
+gap: 16,
+paddingHorizontal: 20,
+},
+listServiceCard: {
+flexDirection: 'row',
+backgroundColor: '#FFFFFF',
+borderRadius: 16,
+overflow: 'hidden',
+borderWidth: 1,
+borderColor: '#F0F0F0',
+padding: 14,
+shadowColor: '#000',
+shadowOffset: { width: 0, height: 2 },
+shadowOpacity: 0.08,
+shadowRadius: 8,
+elevation: 3,
+},
+serviceCardImageContainer: {
+position: 'relative',
+},
+listServiceImage: {
+width: 100,
+height: 100,
+borderRadius: 12,
+backgroundColor: '#F5F5F5',
+},
+genderBadge: {
+position: 'absolute',
+top: 6,
+right: 6,
+backgroundColor: 'rgba(0, 0, 0, 0.7)',
+borderRadius: 12,
+padding: 4,
+},
+listServiceInfo: {
+flex: 1,
+marginLeft: 14,
+justifyContent: 'space-between',
+},
+serviceHeader: {
+marginBottom: 6,
+},
+listServiceName: {
+fontSize: 16,
+fontWeight: '700',
+color: '#000',
+marginBottom: 6,
+lineHeight: 20,
+},
+categoryTag: {
+alignSelf: 'flex-start',
+backgroundColor: '#F5F5F5',
+paddingHorizontal: 10,
+paddingVertical: 4,
+borderRadius: 6,
+},
+listServiceCategory: {
+fontSize: 11,
+fontWeight: '600',
+color: '#666',
+textTransform: 'capitalize',
+},
+listServiceRating: {
+flexDirection: 'row',
+alignItems: 'center',
+marginVertical: 6,
+},
+ratingCount: {
+fontSize: 12,
+color: '#7F8C8D',
+marginLeft: 6,
+},
+listServiceFooter: {
+flexDirection: 'row',
+alignItems: 'center',
+justifyContent: 'space-between',
+},
+priceContainer: {
+flexDirection: 'row',
+alignItems: 'center',
+gap: 10,
+},
+listServicePrice: {
+fontSize: 18,
+fontWeight: '800',
+color: '#FF6B9D',
+},
+durationBadge: {
+flexDirection: 'row',
+alignItems: 'center',
+gap: 4,
+backgroundColor: '#F5F5F5',
+paddingHorizontal: 8,
+paddingVertical: 4,
+borderRadius: 6,
+},
+durationText: {
+fontSize: 11,
+fontWeight: '600',
+color: '#666',
+},
+listQuickAdd: {
+position: 'absolute',
+bottom: 14,
+right: 14,
+},
+emptyContainer: {
+alignItems: 'center',
+justifyContent: 'center',
+paddingVertical: 60,
+},
+emptyTitle: {
+fontSize: 18,
+fontWeight: '600',
+color: '#000',
+marginTop: 16,
+marginBottom: 8,
+},
+emptySubtitle: {
+fontSize: 14,
+color: '#666',
+textAlign: 'center',
+},
+loadingContainer: {
+flex: 1,
+justifyContent: 'center',
+alignItems: 'center',
+},
+loadingText: {
+marginTop: 16,
+fontSize: 15,
+color: '#666',
+},
+bottomSpacing: {
+height: 80,
+},
+floatingCartButton: {
+position: 'absolute',
+bottom: 20,
+right: 20,
+width: 150,
+height: 45,
+backgroundColor: '#F5C6CB',
+borderRadius: 16,
+paddingVertical: 12,
+paddingHorizontal: 24,
+shadowColor: '#000',
+shadowOffset: { width: 0, height: 4 },
+shadowOpacity: 0.3,
+shadowRadius: 8,
+elevation: 8,
+zIndex: 1000,
+},
+cartButtonContent: {
+flexDirection: 'row',
+alignItems: 'center',
+justifyContent: 'space-between',
+width: '100%',
+},
+cartButtonText: {
+fontSize: 16,
+fontWeight: '700',
+color: '#D76D77',
+},
+cartBadgeText: {
+position: 'absolute',
+top: -8,
+right: -8,
+backgroundColor: '#FF3B30',
+color: '#FFF',
+fontSize: 10,
+fontWeight: '700',
+paddingHorizontal: 6,
+paddingVertical: 2,
+borderRadius: 10,
+minWidth: 18,
+textAlign: 'center',
+},
+// Banner Styles
+bannersSection: {
+marginBottom: 24,
+paddingTop: 8,
+},
+bannersScroll: {
+paddingHorizontal: 20,
+gap: 12,
+},
+posterBannerCard: {
+width: width - 40,
+height: 500,
+borderRadius: 20,
+overflow: 'hidden',
+backgroundColor: '#000',
+marginRight: 12,
+shadowColor: '#000',
+shadowOffset: { width: 0, height: 4 },
+shadowOpacity: 0.3,
+shadowRadius: 10,
+elevation: 6,
+},
+posterBannerImage: {
+width: '100%',
+height: '100%',
+},
+posterOverlay: {
+position: 'absolute',
+bottom: 0,
+left: 0,
+right: 0,
+padding: 20,
+backgroundColor: 'rgba(0, 0, 0, 0.6)',
+},
+posterTitle: {
+  fontSize: 24,
+  fontWeight: '800',
+  color: '#FFF',
+  marginBottom: 8,
+  textShadowColor: 'rgba(0, 0, 0, 0.75)',
+  textShadowOffset: { width: 0, height: 2 },
+  textShadowRadius: 4,
+},
+posterDescription: {
+  fontSize: 14,
+  color: '#FFF',
+  lineHeight: 20,
+  textShadowColor: 'rgba(0, 0, 0, 0.75)',
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 3,
+},
+bannerIndicators: {
+  flexDirection: 'row',
+  justifyContent: 'center',
+  alignItems: 'center',
+  gap: 8,
+  marginTop: 12,
+  paddingHorizontal: 20,
+},
+bannerIndicator: {
+  width: 8,
+  height: 8,
+  borderRadius: 4,
+  backgroundColor: '#E0E0E0',
+},
+// All Services Banner Section
+allServicesBannerSection: {
+  marginBottom: 24,
+  paddingHorizontal: 20,
+},
+allServicesBannerCard: {
+  width: '100%',
+  height: 200,
+  borderRadius: 16,
+  overflow: 'hidden',
+  backgroundColor: '#000',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.25,
+  shadowRadius: 8,
+  elevation: 5,
+},
+allServicesBannerImage: {
+  width: '100%',
+  height: '100%',
+},
+allServicesBannerOverlay: {
+  position: 'absolute',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  padding: 16,
+  backgroundColor: 'rgba(0, 0, 0, 0.6)',
+},
+allServicesBannerTitle: {
+  fontSize: 20,
+  fontWeight: '700',
+  color: '#FFF',
+  marginBottom: 6,
+  textShadowColor: 'rgba(0, 0, 0, 0.75)',
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 3,
+},
+allServicesBannerDescription: {
+  fontSize: 13,
+  color: '#FFF',
+  lineHeight: 18,
+  textShadowColor: 'rgba(0, 0, 0, 0.75)',
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 3,
+},
+// Inline Banner Styles
+inlineBannerContainer: {
+  marginVertical: 16,
+  paddingHorizontal: 0,
+},
+inlinePosterCard: {
+  width: '100%',
+  height: 400,
+  borderRadius: 20,
+  overflow: 'hidden',
+  backgroundColor: '#000',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.3,
+  shadowRadius: 10,
+  elevation: 6,
+},
 });
 
 export default ServicesPage;

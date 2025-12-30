@@ -1,4 +1,3 @@
-// src/Pages/Cart/CheckoutProduct.js - WITH WALLET INTEGRATION
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -12,8 +11,11 @@ import {
   SafeAreaView,
   Modal,
   RefreshControl,
+  ToastAndroid,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import * as Location from 'expo-location';
 import RazorpayCheckout from 'react-native-razorpay';
 import { API_URL } from '../../API/config';
 import Header from '../../Components/Header';
@@ -37,12 +39,25 @@ const CheckoutProduct = ({ navigation }) => {
   const [walletBalance, setWalletBalance] = useState(0);
   const [loadingWallet, setLoadingWallet] = useState(false);
 
+  // 🗺️ NEW: Coordinates States
+  const [coordinates, setCoordinates] = useState(null);
+  const [fetchingCoordinates, setFetchingCoordinates] = useState(false);
+  const [coordinatesError, setCoordinatesError] = useState(false);
+
   const getAuthHeaders = () => {
     const token = tokens?.accessToken || user?.token;
     return {
       'Content-Type': 'application/json',
       'Authorization': token ? `Bearer ${token}` : ''
     };
+  };
+
+  const showToast = (message) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.LONG);
+    } else {
+      Alert.alert('Notice', message);
+    }
   };
 
   // 💰 Fetch wallet balance
@@ -61,6 +76,129 @@ const CheckoutProduct = ({ navigation }) => {
       console.error('Fetch wallet balance error:', error);
     } finally {
       setLoadingWallet(false);
+    }
+  };
+
+  // 🗺️ NEW: Geocode address using backend API
+  const geocodeAddressViaBackend = async (address) => {
+    try {
+      console.log('🔍 Attempting backend geocoding for:', address);
+      
+      const response = await fetch(`${API_URL}/addresses/geocode-address`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          street: address.address,
+          city: address.city,
+          state: address.state,
+          zipCode: address.pincode
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success && data.data?.latitude && data.data?.longitude) {
+        console.log('✅ Backend geocoding successful:', data.data);
+        return {
+          latitude: parseFloat(data.data.latitude),
+          longitude: parseFloat(data.data.longitude),
+          source: 'backend_api'
+        };
+      }
+      
+      console.warn('⚠️ Backend geocoding returned no coordinates');
+      return null;
+    } catch (error) {
+      console.error('❌ Backend geocoding error:', error);
+      return null;
+    }
+  };
+
+  // 🗺️ NEW: Fallback to device GPS
+  const getCoordinatesViaGPS = async () => {
+    try {
+      console.log('📍 Attempting GPS fallback...');
+      
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.warn('⚠️ Location permission denied');
+        return null;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+        timeout: 10000,
+        maximumAge: 5000,
+      });
+
+      console.log('✅ GPS coordinates obtained:', location.coords);
+      
+      return {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        source: 'device_gps'
+      };
+    } catch (error) {
+      console.error('❌ GPS error:', error);
+      return null;
+    }
+  };
+
+  // 🗺️ NEW: Main function to fetch coordinates with fallback
+  const fetchCoordinatesForAddress = async (address) => {
+    if (!address) {
+      console.warn('⚠️ No address provided for geocoding');
+      return;
+    }
+
+    setFetchingCoordinates(true);
+    setCoordinatesError(false);
+    setCoordinates(null);
+
+    try {
+      console.log('🚀 Starting coordinate fetch for address:', {
+        city: address.city,
+        state: address.state,
+        pincode: address.pincode
+      });
+
+      // STEP 1: Try backend geocoding first
+      let coords = await geocodeAddressViaBackend(address);
+      
+      // STEP 2: If backend fails, try GPS fallback
+      if (!coords) {
+        console.log('🔄 Backend geocoding failed, trying GPS fallback...');
+        showToast('Getting location from device...');
+        coords = await getCoordinatesViaGPS();
+      }
+
+      if (coords) {
+        console.log('✅ Coordinates obtained successfully:', coords);
+        setCoordinates(coords);
+        setCoordinatesError(false);
+        
+        showToast(
+          coords.source === 'backend_api' 
+            ? 'Location verified successfully!' 
+            : 'Using device location as fallback'
+        );
+      } else {
+        console.error('❌ All geocoding attempts failed');
+        setCoordinatesError(true);
+        setCoordinates(null);
+        
+        showToast(
+          'Could not fetch location. Order will be placed, but admin must handle delivery manually.'
+        );
+      }
+    } catch (error) {
+      console.error('❌ Coordinate fetch error:', error);
+      setCoordinatesError(true);
+      setCoordinates(null);
+      
+      showToast('Location fetch failed. Order can still be placed.');
+    } finally {
+      setFetchingCoordinates(false);
     }
   };
 
@@ -84,10 +222,12 @@ const CheckoutProduct = ({ navigation }) => {
         const addresses = addressesData.data || [];
         setSavedAddresses(addresses);
         const defaultAddress = addresses.find(addr => addr.isDefault);
-        if (defaultAddress) {
-          setSelectedAddress(defaultAddress);
-        } else if (addresses.length > 0) {
-          setSelectedAddress(addresses[0]);
+        const addressToSelect = defaultAddress || addresses[0];
+        
+        if (addressToSelect) {
+          setSelectedAddress(addressToSelect);
+          // 🗺️ Fetch coordinates for selected address
+          await fetchCoordinatesForAddress(addressToSelect);
         }
       }
 
@@ -114,7 +254,13 @@ const CheckoutProduct = ({ navigation }) => {
     fetchCheckoutData(false);
   };
 
-  const navigateToAddresses = () => {
+  // 🗺️ NEW: Handle address selection with coordinate fetching
+  const handleAddressSelection = async (address) => {
+    setSelectedAddress(address);
+    await fetchCoordinatesForAddress(address);
+  };
+
+  const navigateToAddresses = async () => {
     navigation.navigate('SavedAddresses');
   };
 
@@ -176,12 +322,12 @@ const CheckoutProduct = ({ navigation }) => {
 
       const options = {
         description: 'Product Order Payment',
-        image: 'https://your-app-logo-url.com/logo.png',
+        image: 'https://wazwanlegacy.s3.us-east-1.amazonaws.com/salons/HUSN+(2).png',
         currency: 'INR',
         key: paymentOrderData.data.keyId,
         amount: paymentOrderData.data.amount,
         order_id: paymentOrderData.data.orderId,
-        name: 'Your App Name',
+        name: 'HUSN SALON',
         prefill: {
           email: user?.email || '',
           contact: user?.phoneNumber || '',
@@ -251,6 +397,26 @@ const CheckoutProduct = ({ navigation }) => {
       return;
     }
 
+    // 🗺️ Show warning if coordinates are missing
+    if (!coordinates || coordinatesError) {
+      Alert.alert(
+        'Location Not Available',
+        'We could not verify the exact location of your delivery address. The order will be placed, but admin must manually handle delivery coordination.\n\nDo you want to continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Continue Anyway', 
+            onPress: () => proceedWithOrder() 
+          }
+        ]
+      );
+      return;
+    }
+
+    await proceedWithOrder();
+  };
+
+  const proceedWithOrder = async () => {
     try {
       setSubmitting(true);
 
@@ -260,13 +426,25 @@ const CheckoutProduct = ({ navigation }) => {
         price: item.price || 0
       }));
 
+      // 🗺️ NEW: Build address with coordinates
       const mappedAddress = {
         type: selectedAddress.addressType || selectedAddress.type || 'Home',
         street: selectedAddress.address || selectedAddress.street || '',
         city: selectedAddress.city || '',
         state: selectedAddress.state || '',
-        zipCode: selectedAddress.pincode || selectedAddress.zipCode || ''
+        zipCode: selectedAddress.pincode || selectedAddress.zipCode || '',
+        // ✅ CRITICAL: Include phone number and contact name from saved address
+        phoneNumber: selectedAddress.phoneNumber || user?.phoneNumber || '',
+        contactName: selectedAddress.fullName || user?.name || '',
+        // 🗺️ CRITICAL: Include coordinates if available
+        latitude: coordinates?.latitude || null,
+        longitude: coordinates?.longitude || null,
+        fullAddress: `${selectedAddress.address}, ${selectedAddress.city}, ${selectedAddress.state} - ${selectedAddress.pincode}`
       };
+
+      console.log('📦 Order Address Payload:', mappedAddress);
+
+      const { total } = calculateTotals();
 
       const orderData = {
         address: mappedAddress,
@@ -278,6 +456,8 @@ const CheckoutProduct = ({ navigation }) => {
         status: 'placed'
       };
 
+      console.log('🚀 Sending order to backend:', orderData);
+
       const response = await fetch(`${API_URL}/orders`, {
         method: 'POST',
         headers: getAuthHeaders(),
@@ -287,6 +467,8 @@ const CheckoutProduct = ({ navigation }) => {
       const data = await response.json();
 
       if (data.success) {
+        console.log('✅ Order created successfully:', data.data);
+
         // 💰 Process payment based on method
         if (selectedPaymentMethod === 'wallet') {
           try {
@@ -314,6 +496,7 @@ const CheckoutProduct = ({ navigation }) => {
           }
         }
 
+        // Clear cart
         await fetch(`${API_URL}/product-cart/clear`, {
           method: 'DELETE',
           headers: getAuthHeaders(),
@@ -331,6 +514,7 @@ const CheckoutProduct = ({ navigation }) => {
             trackingId: data.data.trackingId || `TRK${Date.now()}`,
             courier: data.data.courier || 'FedEx',
             estimatedDelivery: data.data.estimatedDelivery || new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+            hasCoordinates: !!(coordinates?.latitude && coordinates?.longitude)
           }
         });
       } else {
@@ -352,7 +536,6 @@ const CheckoutProduct = ({ navigation }) => {
     }
   };
 
-  // 💰 Render payment method icon
   const getPaymentMethodIcon = (method) => {
     switch (method) {
       case 'wallet': return 'wallet';
@@ -362,7 +545,6 @@ const CheckoutProduct = ({ navigation }) => {
     }
   };
 
-  // 💰 Render payment method label
   const getPaymentMethodLabel = (method) => {
     switch (method) {
       case 'wallet': return 'HUSN Wallet';
@@ -370,6 +552,44 @@ const CheckoutProduct = ({ navigation }) => {
       case 'cod': return 'Cash on Delivery';
       default: return 'Payment Method';
     }
+  };
+
+  // 🗺️ NEW: Render coordinate status indicator
+  const renderCoordinateStatus = () => {
+    if (fetchingCoordinates) {
+      return (
+        <View style={styles.coordinateStatusCard}>
+          <ActivityIndicator size="small" color="#3B82F6" />
+          <Text style={styles.coordinateStatusTextLoading}>
+            Getting location...
+          </Text>
+        </View>
+      );
+    }
+
+    if (coordinates?.latitude && coordinates?.longitude) {
+      return (
+        <View style={[styles.coordinateStatusCard, styles.coordinateStatusSuccess]}>
+          <Icon name="checkmark-circle" size={20} color="#10B981" />
+          <Text style={styles.coordinateStatusTextSuccess}>
+            Location verified ({coordinates.source === 'backend_api' ? 'API' : 'GPS'})
+          </Text>
+        </View>
+      );
+    }
+
+    if (coordinatesError) {
+      return (
+        <View style={[styles.coordinateStatusCard, styles.coordinateStatusError]}>
+          <Icon name="warning" size={20} color="#EF4444" />
+          <Text style={styles.coordinateStatusTextError}>
+            Location unavailable - Manual delivery required
+          </Text>
+        </View>
+      );
+    }
+
+    return null;
   };
 
   const renderDeliveryAddress = () => {
@@ -393,44 +613,49 @@ const CheckoutProduct = ({ navigation }) => {
     return (
       <View>
         {selectedAddress && (
-          <View style={styles.addressCard}>
-            <View style={styles.addressHeader}>
-              <View style={styles.addressTypeContainer}>
-                <Icon 
-                  name={getAddressTypeIcon(selectedAddress.addressType || selectedAddress.type)} 
-                  size={16} 
-                  color="#FF1493" 
-                />
-                <Text style={styles.addressType}>
-                  {selectedAddress.addressType || selectedAddress.type}
-                </Text>
-                {selectedAddress.isDefault && (
-                  <View style={styles.defaultBadge}>
-                    <Text style={styles.defaultBadgeText}>DEFAULT</Text>
-                  </View>
-                )}
+          <>
+            <View style={styles.addressCard}>
+              <View style={styles.addressHeader}>
+                <View style={styles.addressTypeContainer}>
+                  <Icon 
+                    name={getAddressTypeIcon(selectedAddress.addressType || selectedAddress.type)} 
+                    size={16} 
+                    color="#FF1493" 
+                  />
+                  <Text style={styles.addressType}>
+                    {selectedAddress.addressType || selectedAddress.type}
+                  </Text>
+                  {selectedAddress.isDefault && (
+                    <View style={styles.defaultBadge}>
+                      <Text style={styles.defaultBadgeText}>DEFAULT</Text>
+                    </View>
+                  )}
+                </View>
+                <TouchableOpacity onPress={navigateToAddresses}>
+                  <Text style={styles.changeText}>Change</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={navigateToAddresses}>
-                <Text style={styles.changeText}>Change</Text>
-              </TouchableOpacity>
+              
+              <View style={styles.addressDetails}>
+                <Text style={styles.fullName}>
+                  {selectedAddress.fullName || user?.name || 'User'}
+                </Text>
+                <Text style={styles.phoneNumber}>
+                  {selectedAddress.phoneNumber || user?.phoneNumber || ''}
+                </Text>
+                <Text style={styles.addressText}>
+                  {selectedAddress.address || selectedAddress.street}
+                  {selectedAddress.landmark && `, ${selectedAddress.landmark}`}
+                </Text>
+                <Text style={styles.addressText}>
+                  {selectedAddress.city}, {selectedAddress.state} - {selectedAddress.pincode || selectedAddress.zipCode}
+                </Text>
+              </View>
             </View>
-            
-            <View style={styles.addressDetails}>
-              <Text style={styles.fullName}>
-                {selectedAddress.fullName || user?.name || 'User'}
-              </Text>
-              <Text style={styles.phoneNumber}>
-                {selectedAddress.phoneNumber || user?.phoneNumber || ''}
-              </Text>
-              <Text style={styles.addressText}>
-                {selectedAddress.address || selectedAddress.street}
-                {selectedAddress.landmark && `, ${selectedAddress.landmark}`}
-              </Text>
-              <Text style={styles.addressText}>
-                {selectedAddress.city}, {selectedAddress.state} - {selectedAddress.pincode || selectedAddress.zipCode}
-              </Text>
-            </View>
-          </View>
+
+            {/* 🗺️ NEW: Show coordinate status */}
+            {renderCoordinateStatus()}
+          </>
         )}
       </View>
     );
@@ -496,8 +721,7 @@ const CheckoutProduct = ({ navigation }) => {
           contentContainerStyle={styles.emptyContainer}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-        >
+            }>
           <Icon name="cube-outline" size={80} color="#BDC3C7" />
           <Text style={styles.emptyTitle}>No products in cart</Text>
           <Text style={styles.emptySubtitle}>Add products to proceed</Text>
@@ -537,6 +761,7 @@ const CheckoutProduct = ({ navigation }) => {
         {/* Delivery Address Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Delivery Address</Text>
+          <Text style={styles.sectionSubtitle}>We Will use your live location for add</Text>
           {renderDeliveryAddress()}
         </View>
 
@@ -546,11 +771,10 @@ const CheckoutProduct = ({ navigation }) => {
           {productItems.map(renderProductItem)}
         </View>
 
-        {/* 💰 Payment Method Section with Wallet */}
+        {/* Payment Method Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Payment Method</Text>
           
-          {/* 💰 Wallet Balance Display */}
           <View style={styles.walletBalanceCard}>
             <View style={styles.walletBalanceLeft}>
               <Icon name="wallet" size={20} color="#667eea" />
@@ -589,7 +813,6 @@ const CheckoutProduct = ({ navigation }) => {
             <Icon name="chevron-forward" size={20} color="#999" />
           </TouchableOpacity>
 
-          {/* 💰 Insufficient balance warning */}
           {selectedPaymentMethod === 'wallet' && walletBalance < total && (
             <View style={styles.insufficientBalanceWarning}>
               <Icon name="alert-circle" size={16} color="#EF4444" />
@@ -637,14 +860,19 @@ const CheckoutProduct = ({ navigation }) => {
         <TouchableOpacity
           style={[
             styles.placeOrderButton, 
-            (submitting || !selectedAddress) && styles.disabledButton
+            (submitting || !selectedAddress || fetchingCoordinates) && styles.disabledButton
           ]}
           onPress={handlePlaceOrder}
-          disabled={submitting || !selectedAddress}
+          disabled={submitting || !selectedAddress || fetchingCoordinates}
           activeOpacity={0.8}
         >
           {submitting ? (
             <ActivityIndicator size="small" color="#fff" />
+          ) : fetchingCoordinates ? (
+            <>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={styles.placeOrderText}> Getting location...</Text>
+            </>
           ) : (
             <Text style={styles.placeOrderText}>
               {selectedPaymentMethod === 'wallet' ? 'Pay from Wallet' : 
@@ -655,7 +883,7 @@ const CheckoutProduct = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* 💰 Payment Method Modal */}
+      {/* Payment Method Modal */}
       <Modal
         visible={showPaymentModal}
         animationType="slide"
@@ -671,7 +899,7 @@ const CheckoutProduct = ({ navigation }) => {
           </View>
 
           <ScrollView style={styles.modalContent}>
-            {/* 💰 Wallet Option */}
+            {/* Wallet Option */}
             <TouchableOpacity
               style={[
                 styles.paymentMethodCard,
@@ -854,7 +1082,47 @@ const styles = StyleSheet.create({
     color: '#000',
     marginBottom: 16,
   },
-  // 💰 Wallet Styles
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  coordinateStatusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  coordinateStatusSuccess: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+  },
+  coordinateStatusError: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  coordinateStatusTextLoading: {
+    fontSize: 13,
+    color: '#3B82F6',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  coordinateStatusTextSuccess: {
+    fontSize: 13,
+    color: '#10B981',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  coordinateStatusTextError: {
+    fontSize: 13,
+    color: '#EF4444',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
   walletBalanceCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -939,51 +1207,6 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     marginLeft: 8,
     fontWeight: '500',
-  },
-  paymentMethodCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    marginBottom: 16,
-  },
-  selectedPaymentMethodCard: {
-    borderColor: '#667eea',
-    backgroundColor: '#F8F9FF',
-  },
-  paymentMethodIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  paymentMethodInfo: {
-    flex: 1,
-  },
-  paymentMethodTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  selectedPaymentMethodText: {
-    color: '#667eea',
-  },
-  paymentMethodBalance: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#667eea',
-    marginBottom: 4,
-  },
-  paymentMethodDesc: {
-    fontSize: 13,
-    color: '#666',
   },
   noAddressContainer: {
     alignItems: 'center',
@@ -1181,6 +1404,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
     shadowColor: '#FF1493',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -1196,6 +1420,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+    marginLeft: 4,
   },
   modalContainer: {
     flex: 1,
@@ -1222,6 +1447,51 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
     paddingTop: 16,
+  },
+  paymentMethodCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 16,
+  },
+  selectedPaymentMethodCard: {
+    borderColor: '#667eea',
+    backgroundColor: '#F8F9FF',
+  },
+  paymentMethodIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  paymentMethodInfo: {
+    flex: 1,
+  },
+  paymentMethodTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  selectedPaymentMethodText: {
+    color: '#667eea',
+  },
+  paymentMethodBalance: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#667eea',
+    marginBottom: 4,
+  },
+  paymentMethodDesc: {
+    fontSize: 13,
+    color: '#666',
   },
 });
 

@@ -186,10 +186,10 @@ const UserBookingsScreen = ({ navigation }) => {
       />
 
       {/* Status Badge */}
-      <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+      {/* <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
         <Icon name={getStatusIcon(item.status)} size={14} color="#fff" />
         <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
-      </View>
+      </View> */}
 
       <View style={styles.cardContent}>
         {/* Salon Name */}
@@ -209,23 +209,23 @@ const UserBookingsScreen = ({ navigation }) => {
         </View>
 
         {/* Services */}
-        <View style={styles.infoRow}>
+        {/* <View style={styles.infoRow}>
           <Icon name="cut-outline" size={16} color="#10B981" />
           <Text style={styles.infoText}>
             {item.services?.length || 0} service(s)
           </Text>
-        </View>
+        </View> */}
 
         {/* Amount */}
-        <View style={styles.amountContainer}>
+        {/* <View style={styles.amountContainer}>
           <Text style={styles.amountLabel}>Total</Text>
           <Text style={styles.amountValue}>₹{item.totalAmount}</Text>
-        </View>
+        </View> */}
 
         {/* Quick Actions */}
         {isUpcoming(item) && (
           <View style={styles.quickActions}>
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.quickActionButton}
               onPress={(e) => {
                 e.stopPropagation();
@@ -234,7 +234,7 @@ const UserBookingsScreen = ({ navigation }) => {
             >
               <Icon name="calendar" size={16} color="#3B82F6" />
               <Text style={styles.quickActionText}>Reschedule</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
             <TouchableOpacity
               style={[styles.quickActionButton, styles.cancelActionButton]}
               onPress={(e) => {
@@ -292,12 +292,12 @@ const UserBookingsScreen = ({ navigation }) => {
               />
 
               {/* Status */}
-              <View style={styles.detailSection}>
+              {/* <View style={styles.detailSection}>
                 <View style={[styles.statusBadgeLarge, { backgroundColor: getStatusColor(selectedBooking.status) }]}>
                   <Icon name={getStatusIcon(selectedBooking.status)} size={20} color="#fff" />
                   <Text style={styles.statusTextLarge}>{selectedBooking.status.toUpperCase()}</Text>
                 </View>
-              </View>
+              </View> */}
 
               {/* Salon Details */}
               <View style={styles.detailSection}>
@@ -347,7 +347,7 @@ const UserBookingsScreen = ({ navigation }) => {
               </View>
 
               {/* Services */}
-              <View style={styles.detailSection}>
+              {/* <View style={styles.detailSection}>
                 <Text style={styles.detailSectionTitle}>Services Booked</Text>
                 {selectedBooking.services?.map((service, index) => (
                   <View key={index} style={styles.serviceDetailCard}>
@@ -360,10 +360,10 @@ const UserBookingsScreen = ({ navigation }) => {
                     <Text style={styles.serviceDetailPrice}>₹{service.price}</Text>
                   </View>
                 ))}
-              </View>
+              </View> */}
 
               {/* Payment Summary */}
-              <View style={styles.detailSection}>
+              {/* <View style={styles.detailSection}>
                 <Text style={styles.detailSectionTitle}>Payment Summary</Text>
                 <View style={styles.detailCard}>
                   <View style={styles.paymentRow}>
@@ -383,7 +383,7 @@ const UserBookingsScreen = ({ navigation }) => {
                     <Text style={styles.totalPaymentValue}>₹{selectedBooking.totalAmount}</Text>
                   </View>
                 </View>
-              </View>
+              </View> */}
 
               {/* Special Requests */}
               {selectedBooking.specialRequests && (
@@ -398,13 +398,13 @@ const UserBookingsScreen = ({ navigation }) => {
               {/* Action Buttons */}
               {isUpcoming(selectedBooking) && (
                 <View style={styles.modalActions}>
-                  <TouchableOpacity
+                  {/* <TouchableOpacity
                     style={styles.modalActionButton}
                     onPress={() => handleReschedule(selectedBooking)}
                   >
                     <Icon name="calendar" size={20} color="#fff" />
                     <Text style={styles.modalActionText}>Reschedule</Text>
-                  </TouchableOpacity>
+                  </TouchableOpacity> */}
                   <TouchableOpacity
                     style={[styles.modalActionButton, styles.modalCancelButton]}
                     onPress={() => handleCancelBooking(selectedBooking._id)}

@@ -363,7 +363,7 @@ const CheckoutScreen = ({ navigation }) => {
         key: paymentOrderData.data.keyId,
         amount: paymentOrderData.data.amount,
         order_id: paymentOrderData.data.orderId,
-        name: 'Your App Name',
+        name: 'HUSN',
         prefill: {
           email: user?.email || '',
           contact: user?.phoneNumber || '',

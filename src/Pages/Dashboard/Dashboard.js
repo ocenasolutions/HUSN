@@ -54,6 +54,7 @@ const Dashboard = ({ navigation }) => {
   const [featuredServices, setFeaturedServices] = useState([]);
   const [newServices, setNewServices] = useState([]);
   const [categoryServices, setCategoryServices] = useState({});
+  const [banners, setBanners] = useState([]);
 
   // Animated placeholder states
   const [currentPlaceholderIndex, setCurrentPlaceholderIndex] = useState(0);
@@ -74,10 +75,8 @@ const Dashboard = ({ navigation }) => {
 
   const currentPlaceholders = activeTab === 'Services' ? servicePlaceholders : productPlaceholders;
 
-  // Animated placeholder effect
   useEffect(() => {
-    if (searchText.length > 0) return; // Don't animate if user is typing
-
+    if (searchText.length > 0) return; 
     const animatePlaceholder = () => {
       Animated.sequence([
         // Slide up and fade out
@@ -93,13 +92,11 @@ const Dashboard = ({ navigation }) => {
             useNativeDriver: true,
           }),
         ]),
-        // Reset position and update text
         Animated.timing(placeholderTranslateY, {
           toValue: 20,
           duration: 0,
           useNativeDriver: true,
         }),
-        // Slide down and fade in
         Animated.parallel([
           Animated.timing(placeholderTranslateY, {
             toValue: 0,
@@ -113,7 +110,6 @@ const Dashboard = ({ navigation }) => {
           }),
         ]),
       ]).start();
-
       setCurrentPlaceholderIndex((prevIndex) => 
         (prevIndex + 1) % currentPlaceholders.length
       );
@@ -124,7 +120,6 @@ const Dashboard = ({ navigation }) => {
     return () => clearInterval(interval);
   }, [searchText, currentPlaceholders.length, activeTab]);
 
-  // Reset placeholder animation when tab changes
   useEffect(() => {
     setCurrentPlaceholderIndex(0);
     placeholderTranslateY.setValue(0);
@@ -173,17 +168,31 @@ const Dashboard = ({ navigation }) => {
     };
   };
 
-  const fetchAllData = async () => {
-    fetchServices();
-    fetchProducts();
-    fetchProductCategories();
-    fetchServiceCategories();
-    if (user) {
-      fetchProductCart();
-      fetchServiceCart();
-      fetchWishlist();
+  const fetchBanners = async () => {
+  try {
+    const response = await fetch(`${API_URL}/banners`);
+    const data = await response.json();
+    if (data.success) {
+      const activeBanners = data.data.filter(banner => banner.isActive);
+      setBanners(activeBanners.sort((a, b) => a.order - b.order));
     }
-  };
+  } catch (error) {
+    console.error('Error fetching banners:', error);
+  }
+};
+
+const fetchAllData = async () => {
+  fetchServices();
+  fetchProducts();
+  fetchProductCategories();
+  fetchServiceCategories();
+  fetchBanners(); 
+  if (user) {
+    fetchProductCart();
+    fetchServiceCart();
+    fetchWishlist();
+  }
+};
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -816,6 +825,40 @@ const Dashboard = ({ navigation }) => {
     );
   };
 
+  const AllServicesBannerSection = () => {
+  if (banners.length === 0) return null;
+  const randomBanner = banners[Math.floor(Math.random() * banners.length)];
+  
+  return (
+    <View style={styles.allServicesBannerSection}>
+      <TouchableOpacity
+        style={styles.allServicesBannerCard}
+        onPress={() => {
+          if (randomBanner.link) {
+            console.log('Navigate to:', randomBanner.link);
+          }
+        }}
+        activeOpacity={0.95}
+      >
+        <Image
+          source={{ uri: randomBanner.image_url || 'https://via.placeholder.com/350x200' }}
+          style={styles.allServicesBannerImage}
+          resizeMode="cover"
+        />
+        <View style={styles.allServicesBannerOverlay}>
+          {randomBanner.title && (
+            <Text style={styles.allServicesBannerTitle}>{randomBanner.title}</Text>
+          )}
+          {randomBanner.description && (
+            <Text style={styles.allServicesBannerDescription} numberOfLines={2}>
+              {randomBanner.description}
+            </Text>
+          )}
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
+};
   const renderCategoryItem = ({ item }) => (
     <TouchableOpacity
       style={[
@@ -872,77 +915,148 @@ const Dashboard = ({ navigation }) => {
   const cartCount = activeTab === 'Services' ? serviceCartCount : productCartCount;
   const cartRoute = activeTab === 'Services' ? 'ViewCart' : 'ViewCart';
 
-  const ListHeader = () => (
-    <>
-      {currentCategories.length > 0 && (
-        <View style={styles.categoriesSection}>
-          <FlatList
-            data={currentCategories}
-            renderItem={renderCategoryItem}
-            keyExtractor={(item) => item.name}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoriesList}
-          />
+
+  const BannersSection = () => {
+  if (banners.length === 0) return null;
+
+  return (
+    <View style={styles.bannersSection}>
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        pagingEnabled
+        snapToInterval={width - 40}
+        decelerationRate="fast"
+        contentContainerStyle={styles.bannersScroll}
+      >
+        {banners.map((banner) => (
+          <TouchableOpacity
+            key={banner._id}
+            style={styles.posterBannerCard}
+            onPress={() => {
+              if (banner.link) {
+                console.log('Navigate to:', banner.link);
+              }
+            }}
+            activeOpacity={0.95}
+          >
+            <Image
+              source={{ uri: banner.image_url || 'https://via.placeholder.com/350x400' }}
+              style={styles.posterBannerImage}
+              resizeMode="cover"
+            />
+            <View style={styles.posterOverlay}>
+              {banner.title && (
+                <Text style={styles.posterTitle}>{banner.title}</Text>
+              )}
+              {banner.description && (
+                <Text style={styles.posterDescription} numberOfLines={2}>
+                  {banner.description}
+                </Text>
+              )}
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      
+      {banners.length > 1 && (
+        <View style={styles.bannerIndicators}>
+          {banners.map((_, index) => (
+            <View key={index} style={styles.bannerIndicator} />
+          ))}
         </View>
       )}
-      
-      {activeTab === 'Services' && !searchText.trim() && selectedCategory === 'all' && (
-        <>
-          {serviceCategories.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Popular Categories</Text>
-              <View style={styles.categoriesGrid}>
-                {serviceCategories.slice(0, 4).map((cat) => (
-                  <TouchableOpacity
-                    key={cat.name}
-                    style={styles.categoryCard}
-                    onPress={() => handleCategoryPress(cat.name)}
-                  >
-                    <Image
-                      source={{ uri: getFirstServiceImage(cat.name) }}
-                      style={styles.categoryIcon}
-                      resizeMode="cover"
-                    />
-                    <Text style={styles.categoryTitle}>{cat.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {newServices.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Newly Added Services</Text>
-              <View style={styles.newServicesGrid}>
-                {newServices.map((service) => (
-                  <TouchableOpacity
-                    key={service._id}
-                    style={styles.newServiceCard}
-                    onPress={() => navigateToService(service)}
-                  >
-                    <Image
-                      source={{ uri: service.image_url || 'https://via.placeholder.com/60x60' }}
-                      style={styles.newServiceIcon}
-                      resizeMode="cover"
-                    />
-                    <Text style={styles.newServiceTitle} numberOfLines={1}>
-                      {service.name}
-                    </Text>
-                    <ServiceQuickAddButton service={service} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          )}
-
-          <View style={styles.allServicesHeader}>
-            <Text style={styles.sectionTitle}>All Services</Text>
-          </View>
-        </>
-      )}
-    </>
+    </View>
   );
+};
+
+  const ListHeader = () => (
+    <>
+          <BannersSection />
+
+    {currentCategories.length > 0 && (
+      <View style={styles.categoriesSection}>
+        <FlatList
+          data={currentCategories}
+          renderItem={renderCategoryItem}
+          keyExtractor={(item) => item.name}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoriesList}
+        />
+      </View>
+    )}
+    
+    {activeTab === 'Services' && !searchText.trim() && selectedCategory === 'all' && (
+      <>
+        {serviceCategories.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Popular Categories</Text>
+            <View style={styles.categoriesGrid}>
+              {serviceCategories.slice(0, 4).map((cat) => (
+                <TouchableOpacity
+                  key={cat.name}
+                  style={styles.categoryCard}
+                  onPress={() => handleCategoryPress(cat.name)}
+                >
+                  <Image
+                    source={{ uri: getFirstServiceImage(cat.name) }}
+                    style={styles.categoryIcon}
+                    resizeMode="cover"
+                  />
+                  <Text style={styles.categoryTitle}>{cat.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {newServices.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Newly Added Services</Text>
+            <View style={styles.newServicesGrid}>
+              {newServices.map((service) => (
+                <TouchableOpacity
+                  key={service._id}
+                  style={styles.newServiceCard}
+                  onPress={() => navigateToService(service)}
+                >
+                  <Image
+                    source={{ uri: service.image_url || 'https://via.placeholder.com/60x60' }}
+                    style={styles.newServiceIcon}
+                    resizeMode="cover"
+                  />
+                  <Text style={styles.newServiceTitle} numberOfLines={1}>
+                    {service.name}
+                  </Text>
+                  <ServiceQuickAddButton service={service} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Banner before All Services */}
+        <AllServicesBannerSection />
+
+        <View style={styles.allServicesHeader}>
+          <Text style={styles.sectionTitle}>All Services</Text>
+        </View>
+      </>
+    )}
+
+    {activeTab === 'Products' && !searchText.trim() && selectedCategory === 'all' && (
+      <>
+        {/* Banner before All Products */}
+        <AllServicesBannerSection />
+        
+        <View style={styles.allServicesHeader}>
+          <Text style={styles.sectionTitle}>All Products</Text>
+        </View>
+      </>
+    )}
+  </>
+);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -1689,6 +1803,116 @@ const styles = StyleSheet.create({
     color: '#D76D77',
     marginRight: 12,
     letterSpacing: 0.5,
+  },
+   bannersSection: {
+    marginBottom: 24,
+    paddingTop: 8,
+  },
+  bannersScroll: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  posterBannerCard: {
+    width: width - 40,
+    height: 500,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    marginRight: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  posterBannerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  posterOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  posterTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFF',
+    marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  posterDescription: {
+    fontSize: 14,
+    color: '#FFF',
+    lineHeight: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  bannerIndicators: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingHorizontal: 20,
+  },
+  bannerIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E0E0E0',
+  },
+  // All Services/Products Banner Section
+  allServicesBannerSection: {
+    marginBottom: 24,
+    paddingHorizontal: 20,
+  },
+  allServicesBannerCard: {
+    width: '100%',
+    height: 200,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  allServicesBannerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  allServicesBannerOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  allServicesBannerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFF',
+    marginBottom: 6,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  allServicesBannerDescription: {
+    fontSize: 13,
+    color: '#FFF',
+    lineHeight: 18,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
 });
 

@@ -13,9 +13,19 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "extra": {
+      "eas": {
+        "projectId": "0a486d84-5636-446f-9ed4-b12ae872482a"
+      }
+    },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.husn.application"
+      "bundleIdentifier": "com.husn.application",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,13 +33,34 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.husn.application"
+      "package": "com.husn.application",
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "favicon": "./assets/HUSN.png"
     },
+    "notification": {
+      "icon": "./assets/HUSN.png",
+      "color": "#FF6B9D",
+      "iosDisplayInForeground": true,
+      "androidMode": "default",
+      "androidCollapsedTitle": "{{unread_count}} new notifications"
+    },
     "plugins": [
-      "expo-web-browser"
-    ]
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/HUSN.png",
+          "color": "#FF6B9D",
+          "defaultChannel": "default"
+        }
+      ]
+    ],
+    "owner": "vibenames"
   }
 }

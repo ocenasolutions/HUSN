@@ -544,12 +544,12 @@ const CheckoutService = ({ navigation }) => {
 
       const options = {
         description: 'Service Booking Payment',
-        image: 'https://your-app-logo-url.com/logo.png',
+        image: 'https://wazwanlegacy.s3.us-east-1.amazonaws.com/salons/HUSN+(2).png',
         currency: 'INR',
         key: paymentOrderData.data.keyId,
         amount: paymentOrderData.data.amount,
         order_id: paymentOrderData.data.orderId,
-        name: 'Your App Name',
+        name: 'HUSN SALON',
         prefill: {
           email: user?.email || '',
           contact: user?.phoneNumber || '',

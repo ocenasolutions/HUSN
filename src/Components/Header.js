@@ -6,6 +6,9 @@ import {
   TouchableOpacity,
   StatusBar,
   Dimensions,
+  Modal,
+  Animated,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -14,7 +17,7 @@ import { useCart } from '../contexts/CartContext';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { API_URL } from '../API/config';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 const Header = ({ 
   title, 
@@ -34,6 +37,8 @@ const Header = ({
   const [defaultAddress, setDefaultAddress] = useState(null);
   const [addressLoading, setAddressLoading] = useState(true);
   const [walletBalance, setWalletBalance] = useState(0);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [slideAnim] = useState(new Animated.Value(width));
 
   const getAuthHeaders = () => {
     const token = tokens?.accessToken || user?.token;
@@ -44,24 +49,24 @@ const Header = ({
   };
 
   useEffect(() => {
-  const fetchWalletBalance = async () => {
-    try {
-      const response = await fetch(`${API_URL}/wallet/balance`, {
-        headers: getAuthHeaders()
-      });
-      const data = await response.json();
-      if (data.success) {
-        setWalletBalance(data.data.balance);
+    const fetchWalletBalance = async () => {
+      try {
+        const response = await fetch(`${API_URL}/wallet/balance`, {
+          headers: getAuthHeaders()
+        });
+        const data = await response.json();
+        if (data.success) {
+          setWalletBalance(data.data.balance);
+        }
+      } catch (error) {
+        console.error('Error fetching wallet balance:', error);
       }
-    } catch (error) {
-      console.error('Error fetching wallet balance:', error);
+    };
+    
+    if (user) {
+      fetchWalletBalance();
     }
-  };
-  
-  if (user) {
-    fetchWalletBalance();
-  }
-}, [user]);
+  }, [user]);
 
   const fetchDefaultAddress = async () => {
     try {
@@ -136,16 +141,32 @@ const Header = ({
     return routeName.replace(/([A-Z])/g, ' $1').trim();
   };
 
-  const handleCartPress = () => {
-    navigation.navigate('ViewCart');
+  const openMenu = () => {
+    setMenuVisible(true);
+    Animated.timing(slideAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
   };
 
-  const handleWishlistPress = () => {
-    navigation.navigate('Wishlist');
+  const closeMenu = () => {
+    Animated.timing(slideAnim, {
+      toValue: width,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      setMenuVisible(false);
+    });
   };
-  const handleWalletPress = () => {
-    navigation.navigate('Wallet');
-  }
+
+  const handleMenuItemPress = (screenName) => {
+    closeMenu();
+    setTimeout(() => {
+      navigation.navigate(screenName);
+    }, 300);
+  };
+
   const handleAddressPress = () => {
     navigation.navigate('SavedAddresses');
   };
@@ -199,61 +220,130 @@ const Header = ({
             </View>
           )}
 
-          {/* Right Section */}
-<View style={styles.rightSection}>
-  {/* Wallet Button */}
-  <TouchableOpacity 
-    style={styles.actionButton}
-    onPress={handleWalletPress}
-    activeOpacity={0.7}
-  >
-    <Icon 
-      name="wallet-outline" 
-      size={isSmallScreen ? 20 : 22} 
-      color="#333" 
-    />
-  </TouchableOpacity>
-
-  {/* Wishlist Button */}
-  {showWishlist && (
-    <TouchableOpacity 
-      style={styles.actionButton}
-      onPress={handleWishlistPress}
-      activeOpacity={0.7}
-    >
-      <Icon 
-        name="heart-outline" 
-        size={isSmallScreen ? 20 : 22} 
-        color="#333" 
-      />
-    </TouchableOpacity>
-  )}
-  
-  {/* Cart Button */}
-  {showCart && (
-    <TouchableOpacity 
-      style={styles.actionButton}
-      onPress={handleCartPress}
-      activeOpacity={0.7}
-    >
-      <Icon 
-        name="cart-outline" 
-        size={isSmallScreen ? 20 : 22} 
-        color="#333" 
-      />
-      {totalCartCount > 0 && (
-        <View style={[styles.badge, styles.cartBadge]}>
-          <Text style={styles.badgeText}>
-            {totalCartCount > 99 ? '99+' : totalCartCount}
-          </Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  )}
-</View>
-
+          {/* Right Section - Hamburger Menu */}
+          <View style={styles.rightSection}>
+            <TouchableOpacity 
+              style={styles.hamburgerButton}
+              onPress={openMenu}
+              activeOpacity={0.7}
+            >
+              <Icon name="menu" size={28} color="#333" />
+              {totalCartCount > 0 && (
+                <View style={styles.menuBadge}>
+                  <Text style={styles.badgeText}>
+                    {totalCartCount > 99 ? '99+' : totalCartCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
+
+      {/* Sliding Menu Modal */}
+      <Modal
+        visible={menuVisible}
+        transparent
+        animationType="none"
+        onRequestClose={closeMenu}
+      >
+        <TouchableWithoutFeedback onPress={closeMenu}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <Animated.View 
+                style={[
+                  styles.menuContainer,
+                  {
+                    transform: [{ translateX: slideAnim }],
+                    paddingTop: insets.top + 10,
+                  }
+                ]}
+              >
+                {/* Menu Header */}
+                <View style={styles.menuHeader}>
+                  <Text style={styles.menuTitle}>Menu</Text>
+                  <TouchableOpacity 
+                    style={styles.closeButton}
+                    onPress={closeMenu}
+                  >
+                    <Icon name="close" size={28} color="#333" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Menu Items */}
+                <View style={styles.menuItems}>
+                  {/* Wallet */}
+                  <TouchableOpacity 
+                    style={styles.menuItem}
+                    onPress={() => handleMenuItemPress('Wallet')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <Icon name="wallet-outline" size={24} color="#333" />
+                      <View style={styles.menuItemText}>
+                        <Text style={styles.menuItemTitle}>Wallet</Text>
+                        <Text style={styles.menuItemSubtitle}>
+                          Balance: ₹{walletBalance.toFixed(2)}
+                        </Text>
+                      </View>
+                    </View>
+                    <Icon name="chevron-forward" size={20} color="#999" />
+                  </TouchableOpacity>
+
+                  {/* Wishlist */}
+                  {showWishlist && (
+                    <TouchableOpacity 
+                      style={styles.menuItem}
+                      onPress={() => handleMenuItemPress('Wishlist')}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.menuItemLeft}>
+                        <Icon name="heart-outline" size={24} color="#333" />
+                        <View style={styles.menuItemText}>
+                          <Text style={styles.menuItemTitle}>Wishlist</Text>
+                          <Text style={styles.menuItemSubtitle}>
+                            Your favorite items
+                          </Text>
+                        </View>
+                      </View>
+                      <Icon name="chevron-forward" size={20} color="#999" />
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Cart */}
+                  {showCart && (
+                    <TouchableOpacity 
+                      style={styles.menuItem}
+                      onPress={() => handleMenuItemPress('ViewCart')}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.menuItemLeft}>
+                        <View style={styles.iconWithBadge}>
+                          <Icon name="cart-outline" size={24} color="#333" />
+                          {totalCartCount > 0 && (
+                            <View style={styles.inlineBadge}>
+                              <Text style={styles.badgeText}>
+                                {totalCartCount > 99 ? '99+' : totalCartCount}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        <View style={styles.menuItemText}>
+                          <Text style={styles.menuItemTitle}>Cart</Text>
+                          <Text style={styles.menuItemSubtitle}>
+                            {totalCartCount} {totalCartCount === 1 ? 'item' : 'items'}
+                          </Text>
+                        </View>
+                      </View>
+                      <Icon name="chevron-forward" size={20} color="#999" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </Animated.View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </>
   );
 };
@@ -276,26 +366,178 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 56,
   },
-  leftSection: { justifyContent: 'flex-start', alignItems: 'flex-start', minWidth: 100 },
-  backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center', borderRadius: 20 },
-  logoSection: { paddingVertical: 4, paddingHorizontal: 4 },
-  husn: { color: '#FF6B9D', fontSize: 22, fontWeight: 'bold', letterSpacing: 0.5 },
-  addressContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 2, paddingVertical: 2, paddingRight: 4 },
-  addressText: { fontSize: 11, color: '#666', marginLeft: 3, marginRight: 2, maxWidth: 90, fontWeight: '500' },
-  centerSection: { position: 'absolute', left: 0, right: 0, alignItems: 'center', justifyContent: 'center', zIndex: -1 },
-  pageTitle: { color: '#333', fontSize: 18, fontWeight: '600', textAlign: 'center', maxWidth: width - 240 },
-  rightSection: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', minWidth: 100 },
-  actionButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center', marginLeft: 4, position: 'relative', borderRadius: 20 },
-  badge: { position: 'absolute', top: 4, right: 4, borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
-  cartBadge: { backgroundColor: '#FF6B9D' },
-  badgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold', paddingHorizontal: 2 },
-  
-//   walletBadge: {
-//   backgroundColor: '#FFD700', 
-//   top: 6,
-//   right: 6,
-// },
-
+  leftSection: { 
+    justifyContent: 'flex-start', 
+    alignItems: 'flex-start', 
+    minWidth: 100 
+  },
+  backButton: { 
+    width: 40, 
+    height: 40, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    borderRadius: 20 
+  },
+  logoSection: { 
+    paddingVertical: 4, 
+    paddingHorizontal: 4 
+  },
+  husn: { 
+    color: '#FF6B9D', 
+    fontSize: 22, 
+    fontWeight: 'bold', 
+    letterSpacing: 0.5 
+  },
+  addressContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginTop: 2, 
+    paddingVertical: 2, 
+    paddingRight: 4 
+  },
+  addressText: { 
+    fontSize: 11, 
+    color: '#666', 
+    marginLeft: 3, 
+    marginRight: 2, 
+    maxWidth: 90, 
+    fontWeight: '500' 
+  },
+  centerSection: { 
+    position: 'absolute', 
+    left: 0, 
+    right: 0, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    zIndex: -1 
+  },
+  pageTitle: { 
+    color: '#333', 
+    fontSize: 18, 
+    fontWeight: '600', 
+    textAlign: 'center', 
+    maxWidth: width - 240 
+  },
+  rightSection: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'flex-end', 
+    minWidth: 60 
+  },
+  hamburgerButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 22,
+    position: 'relative',
+  },
+  menuBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: '#FF6B9D',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+    paddingHorizontal: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  menuContainer: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: width * 0.8,
+    maxWidth: 320,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: -2, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  menuHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  menuTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  closeButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 22,
+  },
+  menuItems: {
+    paddingTop: 8,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f5f5f5',
+  },
+  menuItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  iconWithBadge: {
+    position: 'relative',
+    marginRight: 16,
+  },
+  inlineBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    backgroundColor: '#FF6B9D',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  menuItemText: {
+    marginLeft: 16,
+    flex: 1,
+  },
+  menuItemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 2,
+  },
+  menuItemSubtitle: {
+    fontSize: 13,
+    color: '#666',
+  },
 });
 
 export default Header;

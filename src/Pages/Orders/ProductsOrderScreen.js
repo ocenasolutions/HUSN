@@ -28,6 +28,12 @@ const ProductsOrderScreen = ({ navigation }) => {
 
   const statusFilters = ['All', 'placed', 'confirmed', 'preparing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'];
 
+  // ✅ NEW: Helper to check if order uses Borzo delivery
+  const hasBorzoDelivery = (order) => {
+    return order.courier?.toLowerCase().includes('borzo') || 
+           order.trackingNumber?.toLowerCase().includes('borzo');
+  };
+
   const getAuthHeaders = () => {
     const token = tokens?.accessToken || user?.token;
     return {
@@ -191,6 +197,7 @@ const ProductsOrderScreen = ({ navigation }) => {
 
   const renderOrderItem = ({ item: order }) => {
     const productItems = order.productItems || [];
+    const isBorzoOrder = hasBorzoDelivery(order);
     
     return (
       <View style={styles.orderCard}>
@@ -201,11 +208,20 @@ const ProductsOrderScreen = ({ navigation }) => {
               {formatDate(order.createdAt)}
             </Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) + '15' }]}>
-            <Icon name={getStatusIcon(order.status)} size={16} color={getStatusColor(order.status)} />
-            <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>
-              {getStatusDisplayName(order.status)}
-            </Text>
+          <View style={styles.orderBadges}>
+            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) + '15' }]}>
+              <Icon name={getStatusIcon(order.status)} size={16} color={getStatusColor(order.status)} />
+              <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>
+                {getStatusDisplayName(order.status)}
+              </Text>
+            </View>
+            {/* ✅ NEW: Borzo Badge */}
+            {isBorzoOrder && (
+              <View style={styles.borzoBadge}>
+                <Icon name="bicycle" size={12} color="#10B981" />
+                <Text style={styles.borzoBadgeText}>Borzo</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -218,14 +234,14 @@ const ProductsOrderScreen = ({ navigation }) => {
           )}
         </View>
 
-        {order.shippingAddress && (
+        {order.address && (
           <View style={styles.addressSection}>
             <View style={styles.addressHeader}>
               <Icon name="location" size={16} color="#FF6B9D" />
               <Text style={styles.addressLabel}>Delivery Address</Text>
             </View>
             <Text style={styles.addressText}>
-              {order.shippingAddress.street}, {order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.zipCode}
+              {order.address.street}, {order.address.city}, {order.address.state} - {order.address.zipCode}
             </Text>
           </View>
         )}
@@ -237,6 +253,7 @@ const ProductsOrderScreen = ({ navigation }) => {
           </View>
           
           <View style={styles.orderActions}>
+            {/* Cancel Button - Only for placed orders */}
             {['placed'].includes(order.status?.toLowerCase()) && (
               <TouchableOpacity
                 style={styles.cancelButton}
@@ -246,6 +263,22 @@ const ProductsOrderScreen = ({ navigation }) => {
               </TouchableOpacity>
             )}
             
+            {/* ✅ NEW: Track Delivery Button - For Borzo orders that are active */}
+            {isBorzoOrder && 
+             ['confirmed', 'shipped', 'out_for_delivery', 'preparing'].includes(order.status?.toLowerCase()) && (
+              <TouchableOpacity
+                style={styles.trackDeliveryButton}
+                onPress={() => navigation.navigate('DeliveryTracking', {
+                  orderId: order._id,
+                  orderNumber: order.orderNumber
+                })}
+              >
+                <Icon name="bicycle-outline" size={16} color="#fff" />
+                <Text style={styles.trackDeliveryButtonText}>Track Delivery</Text>
+              </TouchableOpacity>
+            )}
+            
+            {/* Rate Order Button - Only for delivered orders */}
             {order.status?.toLowerCase() === 'delivered' ? (
               <TouchableOpacity
                 style={styles.rateOrderButton}
@@ -256,10 +289,11 @@ const ProductsOrderScreen = ({ navigation }) => {
                 <Icon name="star-outline" size={16} color="#FFD700" />
                 <Text style={styles.rateOrderButtonText}>Rate Products</Text>
               </TouchableOpacity>
-            ) : (
+            ) : !isBorzoOrder && !['placed'].includes(order.status?.toLowerCase()) && (
+              /* Regular Track Order Button - For non-Borzo orders */
               <TouchableOpacity
                 style={styles.viewDetailsButton}
-                onPress={() => navigation.navigate('TrackOrder', { 
+                onPress={() => navigation.navigate('DeliveryTrackingScreen', { 
                   orderId: order._id,
                   orderNumber: order.orderNumber,
                   orderType: 'order'
@@ -284,7 +318,7 @@ const ProductsOrderScreen = ({ navigation }) => {
         </Text>
         <TouchableOpacity
           style={styles.shopNowButton}
-          onPress={() => navigation.navigate('MainTabs', { screen: 'Products' })}
+          onPress={() => navigation.navigate('Product' )}
         >
           <Text style={styles.shopNowText}>Browse Products</Text>
         </TouchableOpacity>
@@ -477,6 +511,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#7F8C8D',
   },
+  orderBadges: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -488,6 +526,23 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  // ✅ NEW: Borzo Badge Style
+  borzoBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    gap: 4,
+  },
+  borzoBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#10B981',
   },
   orderItems: {
     padding: 16,
@@ -618,6 +673,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#FFA500',
+  },
+  // ✅ Track Delivery Button (already existed)
+  trackDeliveryButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#4B7BE5',
+  },
+  trackDeliveryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
   },
   loadingContainer: {
     flex: 1,
